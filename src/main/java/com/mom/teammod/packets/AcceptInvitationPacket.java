@@ -1,0 +1,44 @@
+package com.mom.teammod.packets;
+
+import com.mom.teammod.NetworkHandler;
+import com.mom.teammod.TeamManager;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraftforge.network.NetworkEvent;
+
+import java.util.UUID;
+import java.util.function.Supplier;
+
+public class AcceptInvitationPacket {
+    private String teamName;
+
+    public AcceptInvitationPacket(String teamName) {
+        this.teamName = teamName;
+    }
+
+    public static void encode(AcceptInvitationPacket pkt, FriendlyByteBuf buf) {
+        buf.writeUtf(pkt.teamName);
+    }
+
+    public static AcceptInvitationPacket decode(FriendlyByteBuf buf) {
+        return new AcceptInvitationPacket(buf.readUtf(32767));
+    }
+
+    public static void handle(AcceptInvitationPacket pkt, Supplier<NetworkEvent.Context> ctx) {
+        ctx.get().enqueueWork(() -> {
+            if (TeamManager.acceptInvitation(pkt.teamName, ctx.get().getSender().getUUID())) {
+                // Синхронизировать с клиентом и другими членами
+                TeamManager.Team team = TeamManager.getServerTeam(pkt.teamName);
+                if (team != null) {
+                    for (UUID member : team.getMembers()) {
+                        ServerPlayer player = ctx.get().getSender().getServer().getPlayerList().getPlayer(member);
+                        if (player != null) {
+                            NetworkHandler.INSTANCE.sendTo(new TeamSyncPacket(pkt.teamName), player.connection.connection, net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT);
+                        }
+                    }
+                }
+            }
+        });
+        ctx.get().setPacketHandled(true);
+    }
+}

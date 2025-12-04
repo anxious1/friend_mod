@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "EIE",
+    "ICI",
+    "EIE"
+  ],
+  "key": {
+    "E": { "item": "minecraft:echo_shard" },
+    "I": { "item": "cataclysm:black_steel_ingot" },
+    "C": { "item": "minecraft:compass" }
+  },
+  "result": {
+    "item": "teammod:team_compass",
+    "count": 1
+  }
+}

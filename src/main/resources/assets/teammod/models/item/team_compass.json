@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/compass",
+  "textures": {
+    "layer0": "teammod:item/compass_00"
+  }
+}

@@ -1,0 +1,41 @@
+modLoader="javafml" #mandatory
+loaderVersion="[47,)" #mandatory, Forge version for 1.20.1
+license="All Rights Reserved" #mandatory, choose your license (modify as needed)
+
+[[mods]] #mandatory
+modId="teammod" #mandatory, matches MODID in TeamMod.java
+version="1.0.0" #mandatory
+displayName="Party/Team Mod" #mandatory
+description='''
+A mod that adds a team system for players, including team management, invites, friendly fire toggle, team compass, and integration with other mods.
+'''
+authors="Birdman" #optional
+
+# Dependencies
+[[dependencies.teammod]]
+modId="forge"
+mandatory=true
+versionRange="[47.4.0,)" # Matches Forge version from your log
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.teammod]]
+modId="minecraft"
+mandatory=true
+versionRange="[1.20.1,1.21)"
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.teammod]]
+modId="cataclysm"
+mandatory=true
+versionRange="[3.16,)" # Matches Cataclysm version from your log
+ordering="NONE"
+side="BOTH"
+
+[[dependencies.teammod]]
+modId="irons_spellbooks"
+mandatory=true
+versionRange="[1.20.1-3.4.0.9,)" # Matches Iron's Spells 'n Spellbooks version from your log
+ordering="NONE"
+side="BOTH"
