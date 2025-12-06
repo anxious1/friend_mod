@@ -12,18 +12,18 @@ import net.minecraft.world.entity.player.Player;
 
 import java.util.UUID;
 
-public class OtherTeamProfileScreen extends Screen {
+public class TeamMemberScreen extends Screen {
 
-    // АТЛАС для чужой команды
-    private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
-            "textures/gui/other_profile_background.png");
+    // АТЛАС для члена команды
+    public static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
+            "textures/gui/team_profile_background.png");
 
-    // Координаты из разметки (аналогичные TeamProfileOwner)
+    // Координаты из разметки (аналогичные OtherTeamProfileScreen)
     private static final int TAG_U      = 1;   // tag
     private static final int TAG_V      = 207;
     private static final int TAG_W      = 28;
     private static final int TAG_H      = 10;
-
+    private Screen parentScreen;
     private static final int COMPASS_U  = 1;   // compass
     private static final int COMPASS_V  = 231;
     private static final int COMPASS_W  = 15;
@@ -34,14 +34,12 @@ public class OtherTeamProfileScreen extends Screen {
     private static final int FFON_W     = 12;
     private static final int FFON_H     = 12;
 
-    // Новая текстура кнопки join_team
-    private static final int JOIN_TEAM_U    = 30;  // join_team из разметки (29.61 округляем до 30)
-    private static final int JOIN_TEAM_V    = 206; // 206.25 округляем до 206
-    private static final int JOIN_TEAM_W    = 50;  // 79.41 - 29.61 ≈ 50
-    private static final int JOIN_TEAM_H    = 9;   // 215.55 - 206.25 ≈ 9
+    // Кнопка leave_team (размеры из разметки: 124.49, 138.36, 187.19, 151.57)
+    private static final int LEAVE_TEAM_W = 62;  // 187.19 - 124.49 ≈ 63
+    private static final int LEAVE_TEAM_H = 12;  // 151.57 - 138.36 ≈ 13
 
-    private static final int GUI_WIDTH  = 256;
-    private static final int GUI_HEIGHT = 170;
+    public static final int GUI_WIDTH  = 256;
+    public static final int GUI_HEIGHT = 170;
 
     // Смещения (такие же как в TeamProfileOwner)
     private static final int OFFSET_X = 240;
@@ -77,13 +75,12 @@ public class OtherTeamProfileScreen extends Screen {
 
     private static final int XP_BAR_U = 0;
     private static final int XP_BAR_V = 170;
-    private static final int XP_BAR_W = 83;  // 82.89 округляем до 83
-    private static final int XP_BAR_H = 5;   // 174.55 - 170.05 = 4.5, округляем до 5
+    private static final int XP_BAR_W = 83;
+    private static final int XP_BAR_H = 5;
 
-
-    public OtherTeamProfileScreen(Screen parent, String teamName, String teamTag,
-                                  boolean showTag, boolean showCompass, boolean friendlyFire,
-                                  UUID teamLeader) {
+    public TeamMemberScreen(Screen parent, String teamName, String teamTag,
+                            boolean showTag, boolean showCompass, boolean friendlyFire,
+                            UUID teamLeader) {
         super(Component.literal(teamName));
         this.teamName = teamName;
         this.teamTag = teamTag;
@@ -91,10 +88,11 @@ public class OtherTeamProfileScreen extends Screen {
         this.showCompass = showCompass;
         this.friendlyFire = friendlyFire;
         this.teamLeader = teamLeader;
+        this.parentScreen = null;
     }
 
-    private int left() { return (width - GUI_WIDTH) / 2; }
-    private int top()  { return (height - GUI_HEIGHT) / 2; }
+    public int left() { return (width - GUI_WIDTH) / 2; }
+    public int top()  { return (height - GUI_HEIGHT) / 2; }
 
     private int[] getOnlineAndTotalPlayers() {
         TeamManager.Team team = TeamManager.clientTeams.get(teamName);
@@ -115,13 +113,13 @@ public class OtherTeamProfileScreen extends Screen {
         int guiX = left();
         int guiY = top();
 
-        // ЗАМЕНА: вместо customize кнопка join_team
-        addJoinTeamButton(guiX + (67-7+9) + OFFSET_X/4, guiY + 105+1 + OFFSET_Y/4, 56, 11);
+        // ЗАМЕНА: вместо join_team - leave_team (прозрачная кнопка без текстуры)
+        addLeaveTeamButton(guiX - 4 + (67-7+9) + OFFSET_X/4, guiY - 2 + 105+1 + OFFSET_Y/4, LEAVE_TEAM_W, LEAVE_TEAM_H);
 
         // УБРАНА кнопка замка, вместо неё - пустая область с подсказкой
         addEmptyHintArea(guiX + 118 - 72 - 6 - 9 +4 + OFFSET_X/4 - 2, guiY + 90 - 42 - 20 +4 + OFFSET_Y/4 - 1, 9, 9);
 
-        // Создаём 9 кнопок-ячеек для участников (как в TeamProfileOwner)
+        // Создаём 9 кнопок-ячеек для участников (как в OtherTeamProfileScreen)
         createPlayerButtons(guiX, guiY);
     }
 
@@ -205,8 +203,7 @@ public class OtherTeamProfileScreen extends Screen {
     }
 
     private void onPlayerClicked(String playerName) {
-        System.out.println("Клик по игроку в чужой команде: " + playerName);
-        // TODO: можно открыть профиль игрока
+        System.out.println("Клик по игроку в своей команде: " + playerName);
     }
 
     private Button addTransparentButton(int x, int y, int w, int h, Runnable action, Component tooltip) {
@@ -222,32 +219,24 @@ public class OtherTeamProfileScreen extends Screen {
         return addRenderableWidget(btn);
     }
 
-    private void addJoinTeamButton(int x, int y, int w, int h) {
-        addRenderableWidget(new Button(x, y, JOIN_TEAM_W, JOIN_TEAM_H, Component.empty(), b -> {
-            // Открываем TeamMemberScreen при нажатии
-            minecraft.setScreen(new TeamMemberScreen(
-                    OtherTeamProfileScreen.this, // parent screen
+    private void addLeaveTeamButton(int x, int y, int w, int h) {
+        addRenderableWidget(new Button(x, y, w, h, Component.empty(), b -> {
+            // Открываем окно подтверждения выхода
+            minecraft.setScreen(new LeaveTeamScreen(
+                    TeamMemberScreen.this, // ← ВАЖНО: this, а не null
                     teamName,
-                    teamTag,
-                    showTag,
-                    showCompass,
-                    friendlyFire,
-                    teamLeader
+                    teamTag
             ));
         }, s -> Component.empty()) {
             {
-                setTooltip(Tooltip.create(Component.literal("Подать заявку на вступление в команду")));
+                setTooltip(Tooltip.create(Component.literal("Покинуть команду")));
             }
 
             @Override
             public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                // Рисуем текстуру join_team
-                RenderSystem.setShaderTexture(0, ATLAS);
-                g.blit(ATLAS, getX() + 2, getY() - 1, JOIN_TEAM_U, JOIN_TEAM_V, JOIN_TEAM_W, JOIN_TEAM_H, 256, 256);
-
-                // Подсветка при наведении (теперь точно по размерам текстуры)
+                // Прозрачная кнопка без текстуры
                 if (isHovered()) {
-                    g.fill(getX(), getY() - 1, getX() + 2 + JOIN_TEAM_W, getY() + JOIN_TEAM_H, 0x30FFFFFF);
+                    g.fill(getX(), getY(), getX() + width, getY() + height, 0x30FFFFFF);
                 }
             }
         });
@@ -265,7 +254,6 @@ public class OtherTeamProfileScreen extends Screen {
             @Override
             public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
                 // Не рисуем никакой текстуры - просто пустая область
-                // Подсветка при наведении
                 if (isHovered()) {
                     g.fill(getX(), getY(), getX() + width, getY() + height, 0x30FFFFFF);
                 }
@@ -273,33 +261,12 @@ public class OtherTeamProfileScreen extends Screen {
         });
     }
 
-    private void openPlayersList() {
-        // TODO: открыть список участников для просмотра (только просмотр, без редактирования)
-        System.out.println("Открыть список участников команды: " + teamName);
-    }
-
-    @Override
-    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        renderBackground(g);
-        renderBg(g, partialTick, mouseX, mouseY);
-
+    public void renderElementsWithoutButtons(GuiGraphics g) {
+        // Рисуем ТОЛЬКО иконки и элементы (без текста и кнопок)
         int guiX = left();
         int guiY = top();
 
-        // Название команды
-        g.drawCenteredString(font, teamName, guiX + 19 + OFFSET_X/4 - 2, guiY + OFFSET_Y/4 - 2, 0xFFFFFF);
-
-        // Тег команды (если отображается)
-        if (teamTag != null && !teamTag.isEmpty() && showTag) {
-            g.drawCenteredString(font, teamTag, guiX + 19 + OFFSET_X/4 - 2, guiY + 26 + OFFSET_Y/4 - 15, 0xFFFFFF);
-        }
-
-        // Онлайн/всего участников
-        int[] stats = getOnlineAndTotalPlayers();
-        g.drawCenteredString(font, stats[0] + "/" + stats[1], guiX + 118 + OFFSET_X/4 - 2, guiY + 13 + OFFSET_Y/4 + 2, 0xFFFFFF);
-
-        // Иконки настроек команды
-        RenderSystem.setShaderTexture(0, ATLAS);
+        // ТОЛЬКО ИКОНКИ НАСТРОЕК (без текста команды, тега, онлайн)
         if (showTag) {
             g.blit(ATLAS, guiX + 118 - 14 + OFFSET_X/4 - 2, guiY + 34 + OFFSET_Y/4 - 1,
                     TAG_U, TAG_V, TAG_W, TAG_H, 256, 256);
@@ -313,30 +280,86 @@ public class OtherTeamProfileScreen extends Screen {
                     FFON_U, FFON_V, FFON_W, FFON_H, 256, 256);
         }
 
-        // Ползунок
+        // ПОЛЗУНОК
         int baseX = guiX + 10;
         int baseY = guiY + 42;
-
         int trackHeight = 46;
         int maxScroll = Math.max(0, 9 - 3);
         int scrollerOffset = maxScroll == 0 ? 0 :
                 (int)((float)scrollOffset / maxScroll * (trackHeight - SCROLL_H));
-
         g.blit(ATLAS, baseX + 13 - 8, baseY + 5 + 20 + 4 + 10 + scrollerOffset,
                 SCROLL_U, SCROLL_V, SCROLL_W, SCROLL_H, 256, 256);
 
-        // XP бар (чуть ниже списка игроков)
+        // XP БАР
+        int xpBarX = guiX + 10 + 21 - 9 - 7;
+        int xpBarY = guiY + 42 + 20 + 4 + 15 + (3 * (ONLINE_H + 1)) + 5 + 13;
+        g.blit(ATLAS, xpBarX, xpBarY, XP_BAR_U, XP_BAR_V, XP_BAR_W, XP_BAR_H, 256, 256);
+    }
+    @Override
+    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        // 1. СТАНДАРТНОЕ ЗАТЕМНЕНИЕ (как в StatisticsScreen)
+        this.renderBackground(g);
+
+        // 2. РИСУЕМ НАШЕ ОКНО
+        RenderSystem.setShaderTexture(0, ATLAS);
+        int guiX = left();
+        int guiY = top();
+        g.blit(ATLAS, guiX, guiY, 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
+
+        // 3. ТЕКСТ КОМАНДЫ
+        g.drawCenteredString(font, teamName, guiX + 19 + OFFSET_X/4 - 2, guiY + OFFSET_Y/4 - 2, 0xFFFFFF);
+
+        // 4. ТЕГ КОМАНДЫ
+        if (teamTag != null && !teamTag.isEmpty() && showTag) {
+            g.drawCenteredString(font, teamTag, guiX + 19 + OFFSET_X/4 - 2, guiY + 26 + OFFSET_Y/4 - 15, 0xFFFFFF);
+        }
+
+        // 5. ОНЛАЙН/ВСЕГО
+        int[] stats = getOnlineAndTotalPlayers();
+        g.drawCenteredString(font, stats[0] + "/" + stats[1], guiX + 118 + OFFSET_X/4 - 2, guiY + 13 + OFFSET_Y/4 + 2, 0xFFFFFF);
+
+        // 6. ИКОНКИ НАСТРОЕК
+        if (showTag) {
+            g.blit(ATLAS, guiX + 118 - 14 + OFFSET_X/4 - 2, guiY + 34 + OFFSET_Y/4 - 1,
+                    TAG_U, TAG_V, TAG_W, TAG_H, 256, 256);
+        }
+        if (showCompass) {
+            g.blit(ATLAS, guiX + 118 - 7 + OFFSET_X/4 - 2, guiY + 51 + OFFSET_Y/4 - 1,
+                    COMPASS_U, COMPASS_V, COMPASS_W, COMPASS_H, 256, 256);
+        }
+        if (friendlyFire) {
+            g.blit(ATLAS, guiX + 118 - 6 + OFFSET_X/4 - 2, guiY + 72 + OFFSET_Y/4 - 1,
+                    FFON_U, FFON_V, FFON_W, FFON_H, 256, 256);
+        }
+
+        // 7. ПОЛЗУНОК
+        int baseX = guiX + 10;
+        int baseY = guiY + 42;
+        int trackHeight = 46;
+        int maxScroll = Math.max(0, 9 - 3);
+        int scrollerOffset = maxScroll == 0 ? 0 :
+                (int)((float)scrollOffset / maxScroll * (trackHeight - SCROLL_H));
+        g.blit(ATLAS, baseX + 13 - 8, baseY + 5 + 20 + 4 + 10 + scrollerOffset,
+                SCROLL_U, SCROLL_V, SCROLL_W, SCROLL_H, 256, 256);
+
+        // 8. XP БАР
         int xpBarX = guiX + 10 + 21 - 9 - 7;
         int xpBarY = guiY + 42 + 20 + 4 + 15 + (3 * (ONLINE_H + 1)) + 5 + 13;
         g.blit(ATLAS, xpBarX, xpBarY, XP_BAR_U, XP_BAR_V, XP_BAR_W, XP_BAR_H, 256, 256);
 
+        // 9. КНОПКИ
         super.render(g, mouseX, mouseY, partialTick);
     }
 
     protected void renderBg(GuiGraphics g, float pt, int mx, int my) {
+        // Не рисуем родительский экран здесь
+        // Просто рисуем фон TeamMemberScreen
         RenderSystem.setShaderTexture(0, ATLAS);
-        g.blit(ATLAS, left(), top(), 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
+        int guiX = left();
+        int guiY = top();
+        g.blit(ATLAS, guiX, guiY, 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
     }
+
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double deltaY) {
@@ -411,5 +434,11 @@ public class OtherTeamProfileScreen extends Screen {
                 }
             }
         }
+    }
+
+    @Override
+    public void onClose() {
+        // Просто закрываем экран, не возвращаемся к родителю
+        minecraft.setScreen(null);
     }
 }
