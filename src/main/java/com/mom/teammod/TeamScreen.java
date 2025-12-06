@@ -2,6 +2,7 @@ package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
@@ -17,9 +18,12 @@ import static com.mom.teammod.TeamManager.clientTeams;
 
 public class TeamScreen extends Screen {
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/my_teams.png");
-    // Иконки из твоего my_teams.png (координаты из CVAT)
-
     private static final ResourceLocation BACKGROUND = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/team_list_background.png");
+
+    private static final ResourceLocation PROFILE_ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/my_profile_background.png");
+
+    // Иконки из my_teams.png (координаты из CVAT)
+
     private static final int COMPASS_U = 15, COMPASS_V = 208, COMPASS_W = 15, COMPASS_H = 15;  // иконка компаса
     private static final int TAG_U     = 31, TAG_V     = 212, TAG_W     = 28, TAG_H     = 10;   // иконка тега
     private static final int PIMP_DOT_U = 2,  PIMP_DOT_V = 211, PIMP_DOT_W = 10, PIMP_DOT_H = 10;  // маленькая точка пимпа (вкл/выкл)
@@ -30,15 +34,67 @@ public class TeamScreen extends Screen {
     private final Inventory playerInventory;
     private boolean compassVisible = false;
     private Button pimpButton;
+    private static final int PROFILE_BTN_U = 0;    // "Профиль"
+    private static final int PROFILE_BTN_V = 170;
+    private static final int PROFILE_BTN_W = 44;
+    private static final int PROFILE_BTN_H = 14;
+
+    private static final int LEAVE_BTN_U = 0;      // "Покинуть"
+    private static final int LEAVE_BTN_V = 184;
+    private static final int LEAVE_BTN_W = 37;
+    private static final int LEAVE_BTN_H = 14;
+
+    // Плашка команды (из my_teams.png)
+    private static final int PLASHKA_U = 0;
+    private static final int PLASHKA_V = 222;
+    private static final int PLASHKA_W = 100;
+    private static final int PLASHKA_H = 33;
+
+    // Звёздочка
+    private static final int ZVEZDA_U = 0;
+    private static final int ZVEZDA_V = 199;
+    private static final int ZVEZDA_W = 8;
+    private static final int ZVEZDA_H = 6;
+
+    // === НОВОЕ: СКРОЛЛЯЩИЙСЯ СПИСОК ПРИГЛАШЕНИЙ (из MyProfileScreen) ===
+    private static final int INV_U       = 1,   INV_V       = 171, INV_W   = 23, INV_H   = 16;
+    private static final int SCROLLER_U  = 25,  SCROLLER_V  = 171, SCROLLER_W = 6,  SCROLLER_H = 25;
+    private static final int X_U         = 1,   X_V         = 187, X_W     = 12, X_H     = 11;
+    private static final int V_U         = 13,  V_V         = 187, V_W     = 11, V_H     = 11;
+
+    private static final int VISIBLE_SLOTS = 4;
+    private final List<TeamManager.Team> teamList = new ArrayList<>();
+    private int scrollOffset = 0;
+    private boolean isDraggingScroller = false;
+    private int lastRenderedScrollOffset = -1;
+    private static final int SCROLL_TRACK_HEIGHT = 119;
 
     public TeamScreen(TeamMenu menu, Inventory playerInventory, Component title) {
         super(title);
         this.playerInventory = playerInventory;
     }
 
+    private Button addAtlasButton(int x, int y, int w, int h, int u, int v, Runnable action, Component tooltip) {
+        Button btn = new Button(x, y, w, h, Component.empty(), b -> action.run(), s -> Component.empty()) {
+            @Override
+            public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                RenderSystem.setShaderTexture(0, ATLAS);
+                g.blit(ATLAS, getX(), getY(), u, v, w, h, 256, 256);
+                if (isHovered()) {
+                    g.fill(getX(), getY(), getX() + w, getY() + h, 0x30FFFFFF);
+                }
+            }
+        };
+        btn.setTooltip(Tooltip.create(tooltip));
+        return addRenderableWidget(btn);
+    }
+
     @Override
     protected void init() {
         super.init();
+        scrollOffset = 0;
+        lastRenderedScrollOffset = -1;
+
         int guiX = (width - GUI_WIDTH) / 2;
         int guiY = (height - GUI_HEIGHT) / 2;
 
@@ -52,20 +108,52 @@ public class TeamScreen extends Screen {
         for (int slot = 0; slot < 3; slot++) {
             int y = yPositions[slot];
 
-            if (slot >= playerTeamList.size()) {
-                addTransparentButton(guiX + 17, guiY + y, 28, 13,
-                        this::openJoinList, Component.literal("Присоединиться"));
-            }
-
-            addTransparentButton(guiX + 58, guiY + y, 43, 13,
-                    this::openCreateTeam, Component.literal("Создать команду"));
-
             if (slot < playerTeamList.size()) {
                 String teamName = playerTeamList.get(slot);
-                addTransparentButton(guiX + 108, guiY + y, 43, 13,
+                TeamManager.Team team = TeamManager.getTeam(teamName);
+
+                // === Плашка команды — НЕ кликабельная, чисто визуальная ===
+                int plashkaX = guiX + 10 - 1;
+                int plashkaY = guiY + y - 5 - 5 - 1;
+
+                addRenderableOnly(new AbstractWidget(plashkaX, plashkaY, PLASHKA_W, PLASHKA_H, Component.empty()) {
+                    @Override
+                    public void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+                        RenderSystem.setShaderTexture(0, ATLAS);
+                        g.blit(ATLAS, getX(), getY(), PLASHKA_U, PLASHKA_V, PLASHKA_W, PLASHKA_H, 256, 256);
+
+                        g.blit(ATLAS, getX() + PLASHKA_W - ZVEZDA_W - 4, getY() + 4,
+                                ZVEZDA_U, ZVEZDA_V, ZVEZDA_W, ZVEZDA_H, 256, 256);
+
+                        String display = teamName + (team != null && !team.getTag().isEmpty() ? "[" + team.getTag() + "]" : "");
+                        int textX = getX() + PLASHKA_W / 2 - font.width(display) / 2;
+                        int textY = getY() + (PLASHKA_H - 9) / 2;
+                        g.drawString(font, display, textX, textY, 0xFFFFFF, false);
+                    }
+
+                    @Override
+                    public boolean isMouseOver(double mouseX, double mouseY) { return false; }
+
+                    @Override
+                    protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {}
+                });
+
+                // Кнопки "Профиль" и "Покинуть" — как и было
+                addAtlasButton(guiX + 108 + 5, guiY + y, PROFILE_BTN_W, PROFILE_BTN_H,
+                        PROFILE_BTN_U, PROFILE_BTN_V,
                         () -> openTeamProfile(teamName), Component.literal("Профиль"));
-                addTransparentButton(guiX + 158, guiY + y, 43, 13,
+
+                addAtlasButton(guiX + 158 + 3, guiY + y, LEAVE_BTN_W, LEAVE_BTN_H,
+                        LEAVE_BTN_U, LEAVE_BTN_V,
                         () -> leaveTeam(teamName), Component.literal("Покинуть"));
+
+            } else {
+                // === Пустой слот — показываем кнопки ===
+                addTransparentButton(guiX + 17, guiY + y, 28, 13,
+                        this::openJoinList, Component.literal("Присоединиться"));
+
+                addTransparentButton(guiX + 58, guiY + y, 43, 13,
+                        this::openCreateTeam, Component.literal("Создать команду"));
             }
         }
 
@@ -94,6 +182,8 @@ public class TeamScreen extends Screen {
                 Component.translatable("gui.teammod.back_to_inventory"),
                 b -> minecraft.setScreen(new InventoryScreen(minecraft.player))
         ).pos(guiX + 10, guiY - 30).size(100, 20).build());
+
+        renderTeamList(null); // ← ЭТО ГЛАВНОЕ! Создаём кнопки при открытии
     }
 
     private Button addTransparentButton(int x, int y, int w, int h, Runnable action, Component tooltip) {
@@ -191,6 +281,7 @@ public class TeamScreen extends Screen {
     public void render(GuiGraphics g, int mx, int my, float pt) {
         renderBackground(g);
         renderBg(g, pt, mx, my);
+        renderScroller(g);
         super.render(g, mx, my, pt);
     }
 
@@ -201,10 +292,182 @@ public class TeamScreen extends Screen {
         g.blit(BACKGROUND, x, y, 0, 0, GUI_WIDTH, GUI_HEIGHT, GUI_WIDTH, GUI_HEIGHT);
     }
 
+
     public void refreshLists() {
         UUID playerUUID = minecraft.player.getUUID();
         clientPlayerTeams.put(playerUUID, new HashSet<>(TeamManager.playerTeams.getOrDefault(playerUUID, Set.of())));
         clientTeams.clear();
         clientTeams.putAll(TeamManager.teams);
+    }
+
+    private <T extends AbstractWidget> T addRenderableOnly(T widget) {
+        this.renderables.add(widget);
+        return widget;
+    }
+
+    private void renderTeamList(GuiGraphics g) {
+        int baseX = (width - GUI_WIDTH) / 2;
+        int baseY = (height - GUI_HEIGHT) / 2;
+
+        int startX = baseX + 111 + 41 + 10 + 20 + 10 + 10 + 10 + 1 + (int)(8 / 0.75f);
+        int startY = baseY + 30 - 8 + 7 + 1 + 2; // ← весь список на 2 пикселя ниже
+
+        if (teamList.isEmpty()) {
+            Set<String> myTeams = TeamManager.clientPlayerTeams.getOrDefault(minecraft.player.getUUID(), Collections.emptySet());
+            teamList.clear();
+            for (TeamManager.Team team : TeamManager.clientTeams.values()) {
+                teamList.add(team);
+            }
+            teamList.sort(Comparator.comparing(TeamManager.Team::getName));
+        }
+
+        int maxVisible = Math.min(4, teamList.size());
+
+        for (int i = 0; i < maxVisible; i++) {
+            int index = i + scrollOffset;
+            if (index >= teamList.size()) break;
+
+            TeamManager.Team team = teamList.get(index);
+            String tag = team.getTag();
+            int invY = startY + i * (INV_H + X_H + 2);
+            int underY = invY + INV_H;
+
+            // INV + тег
+            addRenderableWidget(new TextureButton(startX, invY, INV_W, INV_H, INV_U, INV_V, PROFILE_ATLAS, btn -> {
+                System.out.println("Команда: " + team.getName());
+            }) {
+                @Override
+                protected void renderWidget(GuiGraphics gg, int mx, int my, float pt) {
+                    super.renderWidget(gg, mx, my, pt);
+                    if (!tag.isEmpty()) {
+                        float scale = 0.75f;
+                        gg.pose().pushPose();
+                        gg.pose().scale(scale, scale, scale);
+                        int tx = (int) ((this.getX() + INV_W / 2 + 1.25f) / scale) - font.width(tag) / 2;
+                        int ty = (int) ((invY + INV_H / 2 - 2) / scale);
+                        gg.drawString(font, tag, tx + 1, ty + 1, 0x000000, false);
+                        gg.drawString(font, tag, tx, ty, 0xFFFFFF, false);
+                        gg.pose().popPose();
+                    }
+                }
+            });
+
+            // X
+            addRenderableWidget(new TextureButton(startX + 5 + 20 - 24 -1 , underY, X_W, X_H, X_U, X_V, PROFILE_ATLAS, btn -> {
+                System.out.println("X: " + team.getName());
+            }));
+
+            // V
+            addRenderableWidget(new TextureButton(startX + 5 + 20 + X_W - 24-1, underY, V_W, V_H, V_U, V_V, PROFILE_ATLAS, btn -> {
+                System.out.println("V: " + team.getName());
+            }));
+        }
+    }
+
+    private void renderScroller(GuiGraphics g) {
+        int centerX = width / 2;
+        int baseY = (height - GUI_HEIGHT) / 2;
+
+        int scrollerX = centerX - SCROLLER_W / 2 + 92;
+        int scrollerBaseY = baseY + 80 - 50;
+
+        int offsetY = 0;
+        if (teamList.size() > VISIBLE_SLOTS) {
+            float ratio = (float) scrollOffset / (teamList.size() - VISIBLE_SLOTS);
+            offsetY = (int) (ratio * (SCROLL_TRACK_HEIGHT - SCROLLER_H));
+        }
+
+        g.blit(PROFILE_ATLAS, scrollerX, scrollerBaseY + offsetY,
+                SCROLLER_U, SCROLLER_V, SCROLLER_W, SCROLLER_H, 256, 256);
+    }
+
+    // === СКРОЛЛЕР (всё в одном блоке, без дубликатов) ===
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Проверяем клик по скроллеру
+        if (teamList.size() > VISIBLE_SLOTS) {
+            int centerX = width / 2;
+            int baseY = (height - GUI_HEIGHT) / 2;
+            int scrollerX = centerX - SCROLLER_W / 2 + 92;
+            int scrollerY = baseY + 80 - 50;
+            int trackHeight = SCROLL_TRACK_HEIGHT;
+
+            if (mouseX >= scrollerX && mouseX <= scrollerX + SCROLLER_W &&
+                    mouseY >= scrollerY && mouseY <= scrollerY + trackHeight) {
+                isDraggingScroller = true;
+                updateScrollFromMouse(mouseY);
+                return true;
+            }
+        }
+
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (isDraggingScroller) {
+            updateScrollFromMouse(mouseY);
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        isDraggingScroller = false;
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double deltaY) {
+        if (teamList.size() <= VISIBLE_SLOTS) return false;
+
+        int maxScroll = Math.max(0, teamList.size() - VISIBLE_SLOTS);
+        scrollOffset -= (int) deltaY;
+        scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
+
+        this.renderables.removeIf(w -> w instanceof TextureButton);
+        renderTeamList(null);
+
+        return true;
+    }
+
+    private void updateScrollFromMouse(double mouseY) {
+        int baseY = (height - GUI_HEIGHT) / 2 + 80 - 50;
+        double relativeY = mouseY - baseY;
+        relativeY = Math.max(0, Math.min(relativeY, SCROLL_TRACK_HEIGHT - SCROLLER_H));
+
+        float ratio = (float) relativeY / (SCROLL_TRACK_HEIGHT - SCROLLER_H);
+        int maxOffset = Math.max(0, teamList.size() - VISIBLE_SLOTS);
+        scrollOffset = (int) (ratio * maxOffset);
+        scrollOffset = Math.max(0, Math.min(scrollOffset, maxOffset));
+
+        this.renderables.removeIf(w -> w instanceof TextureButton);
+        renderTeamList(null);
+    }
+
+    private static class TextureButton extends Button {
+        private final ResourceLocation atlas;
+        private final int u, v;
+
+        public TextureButton(int x, int y, int width, int height, int u, int v,
+                             ResourceLocation atlas, OnPress onPress) {
+            super(x, y, width, height, Component.empty(), onPress, DEFAULT_NARRATION);
+            this.atlas = atlas;
+            this.u = u;
+            this.v = v;
+        }
+
+        @Override
+        protected void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+            // Фон из атласа
+            g.blit(atlas, this.getX(), this.getY(), u, v, this.width, this.height, 256, 256);
+
+            // Подсветка при наведении
+            if (this.isHovered()) {
+                g.fill(this.getX(), this.getY(), this.getX() + this.width, this.getY() + this.height, 0x30FFFFFF);
+            }
+        }
     }
 }

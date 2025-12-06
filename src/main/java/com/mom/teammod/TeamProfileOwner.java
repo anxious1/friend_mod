@@ -235,46 +235,7 @@ public class TeamProfileOwner extends Screen {
     }
 
     private void openPlayersList() {
-        // 100% твой старый код — без единого изменения
-        ResourceLocation bg = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/players_list_background.png");
-        minecraft.setScreen(new Screen(Component.literal("Список участников")) {
-            @Override protected void init() {
-                int x = (width - 209) / 2;
-                int y = (height - 170) / 2;
-                addRenderableWidget(Button.builder(Component.literal("Назад"), b -> minecraft.setScreen(TeamProfileOwner.this))
-                        .pos(x + 10, y + 140).size(100, 20).build());
-
-                TeamManager.Team team = TeamManager.clientTeams.get(teamName);
-                if (team != null) {
-                    int memberY = y + 20;
-                    for (UUID memberId : team.getMembers()) {
-                        Player p = minecraft.level.getPlayerByUUID(memberId);
-                        String name = p != null ? p.getName().getString() : "???";
-                        String status = p != null ? "§aOnline" : "§cOffline";
-                        boolean owner = memberId.equals(team.getOwner());
-                        addRenderableWidget(Button.builder(
-                                Component.literal((owner ? name + " §6[Owner]" : name) + " " + status),
-                                b -> { if (p != null && !memberId.equals(minecraft.player.getUUID())) {
-                                    minecraft.setScreen(new OtherProfileScreen(memberId, this, Component.literal("Профиль " + name)));
-                                }}
-                        ).pos(x + 20, memberY).size(169, 20).build());
-                        memberY += 25;
-                    }
-                }
-            }
-
-            @Override
-            public void render(GuiGraphics g, int mx, int my, float pt) {
-                TeamProfileOwner.this.renderBackground(g);
-                TeamProfileOwner.this.renderBg(g, pt, mx, my);
-                g.blit(bg, (width - 209)/2, (height - 170)/2, 0, 0, 209, 170);
-                g.drawCenteredString(font, "Участники " + teamName, width / 2, (height - 170)/2 + 10, 0xFFFFFF);
-                super.render(g, mx, my, pt);
-            }
-
-            @Override public void onClose() { minecraft.setScreen(TeamProfileOwner.this); }
-            @Override public boolean isPauseScreen() { return false; }
-        });
+        minecraft.setScreen(new PlayersListScreen(this, teamName));
     }
 
     private void openCustomization() {
