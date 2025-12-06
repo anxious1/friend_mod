@@ -7,10 +7,13 @@ import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.renderer.texture.AbstractTexture;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+import org.checkerframework.checker.signature.qual.Identifier;
+
 
 import java.util.Set;
 import java.util.UUID;
@@ -55,6 +58,26 @@ public class TeamProfileOwner extends Screen {
     private final boolean showCompass;
     private final boolean friendlyFire;
 
+    // Добавь эти константы в начало класса (после других)
+    private static final int SCROLL_U = 14;   // scroll из разметки
+    private static final int SCROLL_V = 218;
+    private static final int SCROLL_W = 7;
+    private static final int SCROLL_H = 12;
+
+    private static final int ONLINE_U = 1;    // online_player
+    private static final int ONLINE_V = 191;
+    private static final int ONLINE_W = 78;
+    private static final int ONLINE_H = 15;
+
+    private static final int LEADER_U = 1;    // leader_metka
+    private static final int LEADER_V = 246;
+    private static final int LEADER_W = 32;
+    private static final int LEADER_H = 7;
+    private final Button[] playerButtons = new Button[9];
+
+    private int scrollOffset = 0;
+    private boolean isDraggingScroller = false;
+
     // Новое: состояние замка (по умолчанию закрыт — только по приглашению)
     private boolean inviteOnly = true;
 
@@ -86,10 +109,12 @@ public class TeamProfileOwner extends Screen {
     @Override
     protected void init() {
         super.init();
+        scrollOffset = 0;
+
         int guiX = left();
         int guiY = top();
 
-        // Кнопки — 100% как у тебя было
+        // Твои старые кнопки
         addRenderableWidget(Button.builder(
                 Component.translatable("gui.teammod.back_to_inventory"),
                 b -> minecraft.setScreen(new InventoryScreen(minecraft.player))
@@ -98,11 +123,68 @@ public class TeamProfileOwner extends Screen {
         addTransparentButton(guiX - 2 - 2 + OFFSET_X/4, guiY + 31 - 1 + OFFSET_Y/4, 27, 11,
                 this::openPlayersList, Component.literal("Список участников"));
 
-        addTransparentButton(guiX + (67-7+9) + OFFSET_X/4, guiY + 105+1 + OFFSET_Y/4,  56, 11,
-                this::openCustomization, Component.literal("Кастомизация"));
+        addTransparentButton(guiX + (67-7+9) + OFFSET_X/4, guiY + 105+1 + OFFSET_Y/4, 56, 11,
+                this::openCustomization, Component.empty());
 
-        // НОВАЯ КНОПКА-ЗАМОК (по твоим правилам: прозрачная при выключении)
         addToggleLockButton(guiX + 118 - 72 - 6 - 9 +4 + OFFSET_X/4 - 2, guiY + 90 - 42 - 20 +4 + OFFSET_Y/4 - 1, 9, 9);
+
+        // ── СОЗДАЁМ 9 ОТДЕЛЬНЫХ КНОПОК-ЯЧЕЕК (КАЖДАЯ НА СВОЁМ МЕСТЕ) ─────────────────────
+        int baseX = guiX + 10;
+        int baseY = guiY + 42;
+        int cellX = baseX + 21 - 9;
+        int cellY = baseY + 20 + 4 + 15;
+
+        Player owner = minecraft.player;
+        String[] testNames = {"Alex", "Notch", "Jeb", "Dinnerbone", "Grum", "Herobrine", "Steve", "Creeper"};
+        boolean[] testOnline = {true, true, true, true, false, false, false, false};
+
+        for (int i = 0; i < 9; i++) {
+            final int index = i;
+            boolean isOwner = (i == 0);
+            String name = isOwner ? owner.getName().getString() : testNames[i - 1];
+            boolean online = isOwner || testOnline[i - 1];
+
+            int buttonY = cellY + i * (ONLINE_H + 1);
+
+            Button playerButton = new Button(cellX, buttonY, ONLINE_W, ONLINE_H,
+                    Component.empty(), b -> System.out.println("Клик по игроку: " + name), s -> Component.empty()) {
+                @Override
+                public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                    if (!this.visible) return;
+
+                    int bgV = online ? ONLINE_V : 175;
+                    g.blit(ATLAS, getX(), getY(), ONLINE_U, bgV, ONLINE_W, ONLINE_H, 256, 256);
+
+                    ResourceLocation skin = minecraft.getSkinManager().getInsecureSkinLocation(owner.getGameProfile());
+                    int headX = getX() + 3;
+                    int headY = getY() + (ONLINE_H - 8) / 2;
+                    g.blit(skin, headX, headY, 8, 8, 8, 8, 8, 8, 64, 64);
+                    RenderSystem.enableBlend();
+                    g.blit(skin, headX, headY, 8, 8, 40, 8, 8, 8, 64, 64);
+                    RenderSystem.disableBlend();
+
+                    String tagPart = (showTag && teamTag != null && !teamTag.isEmpty()) ? "[" + teamTag + "]" : "";
+                    String fullText = name + tagPart;
+                    if (font.width(fullText) > ONLINE_W - 22) {
+                        fullText = font.plainSubstrByWidth(fullText, ONLINE_W - 25) + "..";
+                    }
+                    g.drawString(font, fullText, getX() + 14, getY() + 4, 0xFFFFFF, false);
+                    if (isOwner) {
+                        g.blit(ATLAS, getX() + ONLINE_W - LEADER_W - 2, getY() + ONLINE_H - LEADER_H - 1,
+                                LEADER_U, LEADER_V, LEADER_W, LEADER_H, 256, 256);
+                    }
+
+                    if (isHovered()) {
+                        g.fill(getX(), getY(), getX() + width, getY() + height, 0x30FFFFFF);
+                    }
+                }
+            };
+
+            updateVisibleButtons();
+            playerButton.visible = (i < 3); // изначально видны первые 3
+            playerButtons[i] = playerButton;
+            addRenderableWidget(playerButton);
+        }
     }
 
     private Button addTransparentButton(int x, int y, int w, int h, Runnable action, Component tooltip) {
@@ -153,46 +235,7 @@ public class TeamProfileOwner extends Screen {
     }
 
     private void openPlayersList() {
-        // 100% твой старый код — без единого изменения
-        ResourceLocation bg = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/players_list_background.png");
-        minecraft.setScreen(new Screen(Component.literal("Список участников")) {
-            @Override protected void init() {
-                int x = (width - 209) / 2;
-                int y = (height - 170) / 2;
-                addRenderableWidget(Button.builder(Component.literal("Назад"), b -> minecraft.setScreen(TeamProfileOwner.this))
-                        .pos(x + 10, y + 140).size(100, 20).build());
-
-                TeamManager.Team team = TeamManager.clientTeams.get(teamName);
-                if (team != null) {
-                    int memberY = y + 20;
-                    for (UUID memberId : team.getMembers()) {
-                        Player p = minecraft.level.getPlayerByUUID(memberId);
-                        String name = p != null ? p.getName().getString() : "???";
-                        String status = p != null ? "§aOnline" : "§cOffline";
-                        boolean owner = memberId.equals(team.getOwner());
-                        addRenderableWidget(Button.builder(
-                                Component.literal((owner ? name + " §6[Owner]" : name) + " " + status),
-                                b -> { if (p != null && !memberId.equals(minecraft.player.getUUID())) {
-                                    minecraft.setScreen(new OtherProfileScreen(memberId, this, Component.literal("Профиль " + name)));
-                                }}
-                        ).pos(x + 20, memberY).size(169, 20).build());
-                        memberY += 25;
-                    }
-                }
-            }
-
-            @Override
-            public void render(GuiGraphics g, int mx, int my, float pt) {
-                TeamProfileOwner.this.renderBackground(g);
-                TeamProfileOwner.this.renderBg(g, pt, mx, my);
-                g.blit(bg, (width - 209)/2, (height - 170)/2, 0, 0, 209, 170);
-                g.drawCenteredString(font, "Участники " + teamName, width / 2, (height - 170)/2 + 10, 0xFFFFFF);
-                super.render(g, mx, my, pt);
-            }
-
-            @Override public void onClose() { minecraft.setScreen(TeamProfileOwner.this); }
-            @Override public boolean isPauseScreen() { return false; }
-        });
+        minecraft.setScreen(new PlayersListScreen(this, teamName));
     }
 
     private void openCustomization() {
@@ -226,7 +269,7 @@ public class TeamProfileOwner extends Screen {
         int guiX = left();
         int guiY = top();
 
-        // ВСЁ — 1 в 1 как у тебя было, только текстуры из атласа
+        // ── Твой старый код (оставляем без изменений) ─────────────────────────────
         g.drawCenteredString(font, teamName, guiX + 19 + OFFSET_X/4 - 2, guiY + OFFSET_Y/4 - 2, 0xFFFFFF);
 
         if (teamTag != null && !teamTag.isEmpty() && showTag) {
@@ -237,27 +280,106 @@ public class TeamProfileOwner extends Screen {
         g.drawCenteredString(font, stats[0] + "/" + stats[1], guiX + 118 + OFFSET_X/4 - 2, guiY + 13 + OFFSET_Y/4 + 2, 0xFFFFFF);
 
         RenderSystem.setShaderTexture(0, ATLAS);
+        if (showTag)      g.blit(ATLAS, guiX + 118 - 14 + OFFSET_X/4 - 2, guiY + 34 + OFFSET_Y/4 - 1, TAG_U,    TAG_V,    TAG_W,    TAG_H,    256, 256);
+        if (showCompass)  g.blit(ATLAS, guiX + 118 - 7  + OFFSET_X/4 - 2, guiY + 51 + OFFSET_Y/4 - 1, COMPASS_U, COMPASS_V, COMPASS_W, COMPASS_H, 256, 256);
+        if (friendlyFire) g.blit(ATLAS, guiX + 118 - 6 + OFFSET_X/4 - 2, guiY + 72 + OFFSET_Y/4 - 1, FFON_U,    FFON_V,    FFON_W,    FFON_H,    256, 256);
 
-        if (showTag) {
-            g.blit(ATLAS, guiX + 118 - 14 + OFFSET_X/4 - 2, guiY + 34 + OFFSET_Y/4 - 1,
-                    TAG_U, TAG_V, TAG_W, TAG_H, 256, 256);
-        }
-        if (showCompass) {
-            g.blit(ATLAS, guiX + 118 - 7 + OFFSET_X/4 - 2, guiY + 51 + OFFSET_Y/4 - 1,
-                    COMPASS_U, COMPASS_V, COMPASS_W, COMPASS_H, 256, 256);
-        }
-        if (friendlyFire) {
-            g.blit(ATLAS, guiX + 118 - 6 + OFFSET_X/4 - 2, guiY + 72 + OFFSET_Y/4 - 1,
-                    FFON_U, FFON_V, FFON_W, FFON_H, 256, 256);
-        }
+        // ── ПОЛЗУНОК (единственное, что рисуем вручную) ─────────────────────────────
+        int baseX = guiX + 10;
+        int baseY = guiY + 42;
 
-        // Замок рисуется только в кнопке (в addToggleLockButton)
+        int trackHeight = 46;
+        int maxScroll = Math.max(0, 9 - 3);
+        int scrollerOffset = maxScroll == 0 ? 0 :
+                (int)((float)scrollOffset / maxScroll * (trackHeight - SCROLL_H));
 
+        g.blit(ATLAS, baseX + 13 - 8, baseY + 5 + 20 + 4 + 10 + scrollerOffset,
+                SCROLL_U, SCROLL_V, SCROLL_W, SCROLL_H, 256, 256);
+
+        // ── ВСЁ ОСТАЛЬНОЕ РИСУЮТ КНОПКИ САМИ (super.render) ───────────────────────
         super.render(g, mouseX, mouseY, partialTick);
     }
 
     protected void renderBg(GuiGraphics g, float pt, int mx, int my) {
         RenderSystem.setShaderTexture(0, ATLAS);
         g.blit(ATLAS, left(), top(), 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double deltaY) {
+        if (9 <= 3) return false;
+
+        int oldOffset = scrollOffset;
+        scrollOffset -= (int) deltaY;
+        scrollOffset = Math.max(0, Math.min(scrollOffset, 9 - 3));
+
+        if (oldOffset != scrollOffset) {
+            updateVisibleButtons();
+        }
+        return true;
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        int trackX = left() + 21 - 9 - 9;
+        int trackY = top() + 20 + 4 + 15 + 18;
+
+        if (mouseX >= trackX && mouseX <= trackX + 7 && mouseY >= trackY && mouseY <= trackY + 50) {
+            isDraggingScroller = true;
+            updateScrollFromMouse(mouseY);
+            return true;
+        }
+        return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (isDraggingScroller) {
+            updateScrollFromMouse(mouseY);
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        isDraggingScroller = false;
+        return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    private void updateScrollFromMouse(double mouseY) {
+        int trackY = top() + 20 + 4 + 15 + 18;
+        double rel = mouseY - trackY;
+        rel = Math.max(0, Math.min(rel, 50 - 12));
+
+        float ratio = (float) rel / (50 - 12);
+        int maxScroll = 9 - 3;
+        int newOffset = Math.round(ratio * maxScroll);
+        newOffset = Math.max(0, Math.min(newOffset, maxScroll));
+
+        if (scrollOffset != newOffset) {
+            scrollOffset = newOffset;
+            updateVisibleButtons();
+        }
+    }
+
+    private void updateVisibleButtons() {
+        int baseY = top() + 42 + 20 + 4 + 15;  // это твоя cellY (точно та же координата, что в init())
+
+        for (int i = 0; i < 9; i++) {
+            if (playerButtons[i] != null) {
+                // Считаем, на каком месте в видимой области должен быть этот игрок
+                int visibleIndex = i - scrollOffset; // от -scrollOffset до 8-scrollOffset
+
+                if (visibleIndex >= 0 && visibleIndex < 3) {
+                    // Эта кнопка должна быть видима — ставим её в правильный слот (0, 1 или 2)
+                    playerButtons[i].setY(baseY + visibleIndex * (ONLINE_H + 1));
+                    playerButtons[i].visible = true;
+                } else {
+                    // Скрываем все остальные (можно даже не двигать, но лучше спрятать)
+                    playerButtons[i].visible = false;
+                }
+            }
+        }
     }
 }
