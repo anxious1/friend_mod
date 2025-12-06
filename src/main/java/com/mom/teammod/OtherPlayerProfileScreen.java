@@ -9,6 +9,7 @@ import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
+import com.mom.teammod.MyTeamsListScreen;
 
 import java.util.*;
 
@@ -111,15 +112,15 @@ public class OtherPlayerProfileScreen extends Screen {
 
         InviteButtonState buttonState = getInviteButtonState();
 
-        // Состояние 1: НЕТ текстуры, прозрачная кнопка
+        // В методе init() класса OtherPlayerProfileScreen заменить:
         if (buttonState == InviteButtonState.NONE) {
             // Прозрачная кнопка на позиции invite_off
             int buttonX = guiX + (GUI_WIDTH - INVITE_OFF_W) / 2 - 23;
             int buttonY = guiY + GUI_HEIGHT - INVITE_OFF_H - 16;
 
             addTransparentButton(buttonX, buttonY, INVITE_OFF_W, INVITE_OFF_H,
-                    this::onInviteOffClicked,
-                    Component.literal("Отклонить приглашение"));
+                    this::openMyTeamsList, // ← ИЗМЕНИТЬ
+                    Component.literal("Пригласить в команду")); // ← ИЗМЕНИТЬ
         }
         // Состояние 2: текстура invite_off, НЕТ кнопки - ничего не создаем
         // Состояние 3: текстура accept_join, ЕСТЬ кнопка с текстурой
@@ -216,6 +217,43 @@ public class OtherPlayerProfileScreen extends Screen {
 
         statsScreen.init(minecraft, width, height);
         minecraft.setScreen(statsScreen);
+    }
+
+    private void openMyTeamsList() {
+        MyTeamsListScreen teamsListScreen = new MyTeamsListScreen(this) {
+            @Override
+            public void render(GuiGraphics g, int mx, int my, float pt) {
+                // 1. Рисуем затемнение ВСЕГО ЭКРАНА
+                g.fill(0, 0, width, height, 0xB3000000);
+
+                // 2. Рисуем текстуру фона GUI поверх затемнения
+                RenderSystem.setShaderTexture(0, ATLAS);
+                int guiX = (width - GUI_WIDTH) / 2;
+                int guiY = (height - GUI_HEIGHT) / 2;
+                g.blit(ATLAS, guiX, guiY, 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
+
+                // 3. Рисуем текстуры кнопок (если есть)
+                InviteButtonState buttonState = getInviteButtonState();
+                if (buttonState == InviteButtonState.INVITE_OFF) {
+                    int inviteX = guiX + (GUI_WIDTH - INVITE_OFF_W) / 2 - 23;
+                    int inviteY = guiY + GUI_HEIGHT - INVITE_OFF_H - 16;
+                    g.blit(ATLAS, inviteX, inviteY, INVITE_OFF_U, INVITE_OFF_V,
+                            INVITE_OFF_W, INVITE_OFF_H, 256, 256);
+                }
+                else if (buttonState == InviteButtonState.ACCEPT_JOIN) {
+                    int acceptX = guiX + (GUI_WIDTH - ACCEPT_JOIN_W) / 2 - 23;
+                    int acceptY = guiY + GUI_HEIGHT - ACCEPT_JOIN_H - 26;
+                    g.blit(ATLAS, acceptX, acceptY, ACCEPT_JOIN_U, ACCEPT_JOIN_V,
+                            ACCEPT_JOIN_W, ACCEPT_JOIN_H, 256, 256);
+                }
+
+                // 4. Рисуем окно со списком команд поверх всего
+                super.render(g, mx, my, pt);
+            }
+        };
+
+        teamsListScreen.init(minecraft, width, height);
+        minecraft.setScreen(teamsListScreen);
     }
 
     private Button addTransparentButton(int x, int y, int w, int h, Runnable action, Component tooltip) {

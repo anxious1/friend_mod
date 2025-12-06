@@ -151,6 +151,7 @@ public class TeamsListScreen extends Screen {
     }
 
     private void repositionSlots() {
+        // Удаляем только виджеты TeamSlotWidget
         this.renderables.removeIf(w -> w instanceof TeamSlotWidget);
 
         int baseX = left() + 45 - 21;
@@ -251,22 +252,35 @@ public class TeamsListScreen extends Screen {
         refreshTeamList(); // Оставляем — но теперь он не сбрасывает скролл
     }
 
-    private class TeamSlotWidget extends AbstractWidget {
+    private class TeamSlotWidget extends Button {
         private final TeamEntry entry;
 
         public TeamSlotWidget(int x, int y, TeamEntry entry) {
-            super(x, y, 167, 23, Component.empty());
+            super(x, y, 167, 23, Component.empty(), btn -> {
+                if (!entry.isMember && TeamManager.clientPlayerTeams.getOrDefault(minecraft.player.getUUID(), Collections.emptySet()).size() < 3) {
+                    // TODO: запрос на вступление
+                }
+            }, DEFAULT_NARRATION);
             this.entry = entry;
         }
 
         @Override
         protected void renderWidget(GuiGraphics g, int mx, int my, float pt) {
             boolean full = TeamManager.clientPlayerTeams.getOrDefault(minecraft.player.getUUID(), Collections.emptySet()).size() >= 3;
-            boolean disabled = entry.isMember || full;
 
-            int u = disabled ? UNAVAIL_U : AVAIL_U;
-            int v = disabled ? UNAVAIL_V : AVAIL_V;
-            int h = disabled ? UNAVAIL_H : AVAIL_H;
+            // Определяем состояние: isHovered для avail, иначе unavail
+            int u, v, h;
+            if (this.isHovered() && !entry.isMember && !full) {
+                // Наведение - avail
+                u = AVAIL_U;
+                v = AVAIL_V;
+                h = AVAIL_H;
+            } else {
+                // Базовое состояние - unavail
+                u = UNAVAIL_U;
+                v = UNAVAIL_V;
+                h = UNAVAIL_H;
+            }
 
             RenderSystem.setShaderTexture(0, ATLAS);
             g.blit(ATLAS, getX(), getY(), u, v, width, h, 256, 256);
@@ -275,21 +289,15 @@ public class TeamsListScreen extends Screen {
             if (!entry.team.getTag().isEmpty()) text += "[" + entry.team.getTag() + "]";
             g.drawString(font, text, getX() + 8, getY() + 8, 0xFFFFFF, false);
 
-            if (!entry.isMember && !full && this.isHovered()) {
+            // Показываем "request" только при наведении на доступную команду
+            if (this.isHovered() && !entry.isMember && !full) {
                 g.blit(ATLAS, getX() + width - REQUEST_W - 5, getY() + height - REQUEST_H - 3,
                         REQUEST_U, REQUEST_V, REQUEST_W, REQUEST_H, 256, 256);
             }
         }
 
         @Override
-        public void onClick(double mx, double my) {
-            if (!entry.isMember && TeamManager.clientPlayerTeams.getOrDefault(minecraft.player.getUUID(), Collections.emptySet()).size() < 3) {
-                // TODO: запрос на вступление
-            }
-        }
-
-        @Override
-        protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {}
+        public void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {}
     }
 
     private static class TeamEntry {
