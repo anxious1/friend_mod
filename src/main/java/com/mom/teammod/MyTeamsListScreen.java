@@ -10,7 +10,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.*;
 
-class MyTeamsListScreen extends Screen {
+public class MyTeamsListScreen extends Screen {
 
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
             "textures/gui/my_teams_list.png");

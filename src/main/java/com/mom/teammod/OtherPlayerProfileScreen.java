@@ -9,7 +9,7 @@ import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
-import com.mom.teammod.MyTeamsListScreen;
+
 
 import java.util.*;
 
@@ -220,7 +220,7 @@ public class OtherPlayerProfileScreen extends Screen {
     }
 
     private void openMyTeamsList() {
-        MyTeamsListScreen teamsListScreen = new MyTeamsListScreen(this) {
+        MyTeamsListScreen teamsListScreen = new com.mom.teammod.MyTeamsListScreen(this) {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
                 // 1. Рисуем затемнение ВСЕГО ЭКРАНА
