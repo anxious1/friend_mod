@@ -54,6 +54,10 @@ public class StatisticsScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        // 1. ТОЧНО как в AchievementPickerScreen1
+        StatisticsScreen.this.renderBackground(g); // ← ВАНИЛЬНОЕ затемнение!
+
+        // 2. Остальной код как был
         int x = (width - GUI_WIDTH) / 2;
         int y = (height - GUI_HEIGHT) / 2;
 
@@ -62,7 +66,7 @@ public class StatisticsScreen extends Screen {
 
         // Рисуем текст (сдвинут на 3 пикселя вниз)
         int textX = x + 15 + 7;
-        int textStartY = y + 15 + 10 + 3; // +3 пикселя вниз
+        int textStartY = y + 15 + 10 + 3;
 
         for (int i = 0; i < VISIBLE_LINES; i++) {
             int index = i + scrollOffset;
@@ -82,8 +86,6 @@ public class StatisticsScreen extends Screen {
         int trackTopY = guiY + 45 - 23;
         int trackBottomY = trackTopY + SCROLL_TRACK_HEIGHT;
 
-        // Фон трека (необязательно, но можно)
-        // g.fill(scrollerX, trackTopY, scrollerX + 7, trackBottomY, 0xFF444444);
 
         int scrollerY = trackTopY;
         if (statsLines.length > VISIBLE_LINES) {
@@ -162,10 +164,5 @@ public class StatisticsScreen extends Screen {
         } else {
             minecraft.setScreen(null);
         }
-    }
-
-    @Override
-    public boolean isPauseScreen() {
-        return false;
     }
 }

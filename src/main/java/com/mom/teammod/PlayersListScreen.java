@@ -70,6 +70,7 @@ public class PlayersListScreen extends Screen {
     private final List<PlayerEntry> allPlayers = new ArrayList<>();
     private List<PlayerEntry> filteredPlayers = new ArrayList<>();
 
+
     public PlayersListScreen(Screen parent, String teamName) {
         super(Component.literal(""));
         this.parent = parent;
@@ -320,6 +321,7 @@ public class PlayersListScreen extends Screen {
                 // Обновляем существующую кнопку
                 this.nameButton.setWidth(nameButtonWidth);
                 this.nameButton.setX(getX() + 34);
+                this.nameButton.setY(getY() + 8);
             } else {
                 // Создаем новую кнопку
                 String finalDisplayName = displayName;
@@ -353,6 +355,9 @@ public class PlayersListScreen extends Screen {
                                 my < (double)(this.getY() + this.height);
                     }
                 };
+
+                // ВАЖНО: Добавляем кнопку в систему виджетов!
+                PlayersListScreen.this.addRenderableWidget(this.nameButton);
             }
         }
 
@@ -462,10 +467,16 @@ public class PlayersListScreen extends Screen {
         }
 
         private void onClickName() {
-            // Открываем профиль при клике на имя
-            Player p = minecraft.level != null ? minecraft.level.getPlayerByUUID(entry.id) : null;
-            if (p != null && !entry.id.equals(minecraft.player.getUUID())) {
-                minecraft.setScreen(new OtherProfileScreen(entry.id, PlayersListScreen.this, Component.literal("Профиль " + entry.name)));
+            if (entry.id.equals(minecraft.player.getUUID())) {
+                // Открыть свой профиль
+                minecraft.setScreen(new MyProfileScreen(Component.literal("Мой профиль")));
+            } else {
+                // Открыть чужой профиль (даже если оффлайн)
+                minecraft.setScreen(new OtherPlayerProfileScreen(
+                        entry.id,
+                        PlayersListScreen.this,
+                        Component.literal("Профиль " + entry.name)
+                ));
             }
         }
 
