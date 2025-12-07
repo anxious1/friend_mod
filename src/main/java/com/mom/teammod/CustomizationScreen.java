@@ -77,10 +77,6 @@ public class CustomizationScreen extends Screen {
         addToggle(guiX + 145, guiY + 76,  1, COMPASS_U, COMPASS_V, COMPASS_W, COMPASS_H, "Переключить отображение участников на компасе");
         addToggle(guiX + 145, guiY + 46,  2, TAG_U,     TAG_V,     TAG_W,     TAG_H,     "Переключить отображение тега команды");
 
-        // === КНОПКА «НАЗАД» ===
-        addRenderableWidget(Button.builder(Component.literal("Назад"), b -> minecraft.setScreen(parent))
-                .pos(guiX + 10, guiY - 25).size(100, 20).build());
-
         // 4 КНОПКИ ДОСТИЖЕНИЙ СПРАВА (25×25)
         addTransparentButton(guiX + 230 - 9, guiY - 10 - 11+8+5+22+12+2+4+2-1,  23, 23, this::openAchivPicker1, Component.literal("Достижение 1"));
         addTransparentButton(guiX + 230 - 9, guiY + 20 - 11+8+5+22+12+2+3+2-1,  23, 23, this::openAchivPicker2, Component.literal("Достижение 2"));

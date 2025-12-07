@@ -114,12 +114,6 @@ public class TeamProfileOwner extends Screen {
         int guiX = left();
         int guiY = top();
 
-        // Твои старые кнопки
-        addRenderableWidget(Button.builder(
-                Component.translatable("gui.teammod.back_to_inventory"),
-                b -> minecraft.setScreen(new InventoryScreen(minecraft.player))
-        ).pos(guiX + 10 + OFFSET_X/4, guiY - 30 + OFFSET_Y/4).size(100, 20).build());
-
         addTransparentButton(guiX - 2 - 2 + OFFSET_X/4, guiY + 31 - 1 + OFFSET_Y/4, 27, 11,
                 this::openPlayersList, Component.literal("Список участников"));
 

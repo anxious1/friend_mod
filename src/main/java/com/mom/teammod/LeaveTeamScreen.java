@@ -13,10 +13,10 @@ public class LeaveTeamScreen extends Screen {
             "textures/gui/leave_team.png");
 
     // Координаты из разметки
-    private static final int FON_U = 0;
-    private static final int FON_V = 0;
-    private static final int FON_W = 147;  // 146.80 округляем до 147
-    private static final int FON_H = 66;   // 65.80 округляем до 66
+    public static final int FON_U = 0;
+    public static final int FON_V = 0;
+    public static final int FON_W = 147;  // 146.80 округляем до 147
+    public static final int FON_H = 66;   // 65.80 округляем до 66
 
     // Кнопки (только для размеров - кнопки прозрачные)
     private static final int CANCEL_W = 39;  // 58.91 - 19.91 ≈ 39
@@ -25,10 +25,10 @@ public class LeaveTeamScreen extends Screen {
     private static final int CONFIRM_H = 10; // 45.72 - 36.02 ≈ 10
 
     // Область для названия команды
-    private static final int TEAM_NAME_U = 12;  // 11.58 округляем до 12
-    private static final int TEAM_NAME_V = 21;  // 21.04 округляем до 21
-    private static final int TEAM_NAME_W = 122; // 133.77 - 11.58 ≈ 122
-    private static final int TEAM_NAME_H = 8;   // 28.67 - 21.04 ≈ 8
+    public static final int TEAM_NAME_U = 12;  // 11.58 округляем до 12
+    public static final int TEAM_NAME_V = 21;  // 21.04 округляем до 21
+    public static final int TEAM_NAME_W = 122; // 133.77 - 11.58 ≈ 122
+    public static final int TEAM_NAME_H = 8;   // 28.67 - 21.04 ≈ 8
 
     private final Screen parentScreen;
     private final String teamName;
@@ -41,8 +41,8 @@ public class LeaveTeamScreen extends Screen {
         this.teamTag = teamTag;
     }
 
-    private int left() { return (width - FON_W) / 2; }
-    private int top()  { return (height - FON_H) / 2; }
+    public int left() { return (width - FON_W) / 2; }
+    public int top()  { return (height - FON_H) / 2; }
 
     @Override
     protected void init() {

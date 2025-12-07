@@ -44,10 +44,25 @@ public class AchievementPickerScreen4 extends Screen {
         int guiY = (height - GUI_HEIGHT) / 2;
         addTransparentButton(guiX + CONFIRM_X, guiY + CONFIRM_Y, CONFIRM_W, CONFIRM_H,
                 () -> this.onClose(), Component.literal("Готово"));
+        // Кнопка "Отмена" — левее "Готово" на 23 пикселя, полностью прозрачная, такой же размер
+        addRenderableWidget(new Button(guiX + CONFIRM_X - 23 - 23 - 11 - 7, guiY + CONFIRM_Y, CONFIRM_W - 5, CONFIRM_H,
+                Component.empty(),
+                button -> this.onClose(),
+                (narration) -> Component.empty())
+        {
+            @Override
+            protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+                // Полностью прозрачная — ничего не рисуем
+                if (this.isHovered()) {
+                    g.fill(this.getX(), this.getY(), this.getX() + this.width, this.getY() + this.height, 0x30FFFFFF);
+                }
+            }
+        });
     }
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        renderBackground(g);
         int x = (width - GUI_WIDTH) / 2;
         int y = (height - GUI_HEIGHT) / 2;
         g.blit(ATLAS, x, y, 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);

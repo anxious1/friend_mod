@@ -120,10 +120,6 @@ public class CreatingTeamScreen extends Screen {
 
         // knopik3 (46) — тег
         addToggleButton(guiX + 145, guiY + 46, 18, 18, 2, KN_TAG_U, KN_TAG_V, KN_TAG_W, KN_TAG_H, "Переключить отображение тега команды");
-        // КНОПКА НАЗАД
-        addRenderableWidget(Button.builder(Component.literal("Назад"), b -> minecraft.setScreen(parent))
-                .pos(guiX + 10, guiY - 25).size(100, 20).build());
-
         updateAll();
     }
 

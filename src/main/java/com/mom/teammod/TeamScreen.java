@@ -39,6 +39,8 @@ public class TeamScreen extends Screen {
     private static final int PROFILE_BTN_W = 44;
     private static final int PROFILE_BTN_H = 14;
 
+    Screen parentScreen;
+
     private static final int LEAVE_BTN_U = 0;      // "Покинуть"
     private static final int LEAVE_BTN_V = 184;
     private static final int LEAVE_BTN_W = 37;
@@ -72,6 +74,7 @@ public class TeamScreen extends Screen {
     public TeamScreen(TeamMenu menu, Inventory playerInventory, Component title) {
         super(title);
         this.playerInventory = playerInventory;
+        this.parentScreen = parentScreen; // Сохраняем ссылку
     }
 
     private Button addAtlasButton(int x, int y, int w, int h, int u, int v, Runnable action, Component tooltip) {
@@ -145,8 +148,8 @@ public class TeamScreen extends Screen {
 
                 addAtlasButton(guiX + 158 + 3, guiY + y, LEAVE_BTN_W, LEAVE_BTN_H,
                         LEAVE_BTN_U, LEAVE_BTN_V,
-                        () -> leaveTeam(teamName), Component.literal("Покинуть"));
-
+                        () -> openLeaveTeam(teamName, team),
+                        Component.literal("Покинуть"));
             } else {
                 // === Пустой слот — показываем кнопки ===
                 addTransparentButton(guiX + 17, guiY + y, 28, 13,
@@ -177,13 +180,47 @@ public class TeamScreen extends Screen {
                 tagEnabled
         );
 
-        // Кнопка "Назад"
-        addRenderableWidget(Button.builder(
-                Component.translatable("gui.teammod.back_to_inventory"),
-                b -> minecraft.setScreen(new InventoryScreen(minecraft.player))
-        ).pos(guiX + 10, guiY - 30).size(100, 20).build());
-
         renderTeamList(null); // ← ЭТО ГЛАВНОЕ! Создаём кнопки при открытии
+    }
+
+    private void openLeaveTeam(String teamName, TeamManager.Team team) {
+        final Screen thisScreen = this; // Сохраняем ссылку на текущий экран (TeamScreen)
+
+        LeaveTeamScreen leaveScreen = new LeaveTeamScreen(thisScreen, teamName,
+                team != null && team.getTag() != null ? team.getTag() : "") {
+            @Override
+            public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+                // 1. Рисуем TeamScreen (thisScreen) в замороженном состоянии
+                thisScreen.render(g, mouseX, mouseY, partialTick);
+
+                // 2. Дополнительное глубокое затемнение поверх
+                g.fill(0, 0, width, height, 0xB3000000);
+
+                // 3. Рисуем окно подтверждения
+                int x = left();
+                int y = top();
+                g.blit(ATLAS, x, y, FON_U, FON_V, FON_W, FON_H, 256, 256);
+
+                // 4. ТЕКСТ КОМАНДЫ
+                String teamText = teamName;
+                String teamTagStr = team != null ? team.getTag() : "";
+                if (teamTagStr != null && !teamTagStr.isEmpty()) {
+                    teamText += "[" + teamTagStr + "]";
+                }
+
+                if (font.width(teamText) > TEAM_NAME_W) {
+                    teamText = font.plainSubstrByWidth(teamText, TEAM_NAME_W - 6) + "..";
+                }
+
+                int textX = x + TEAM_NAME_U + (TEAM_NAME_W - font.width(teamText)) / 2;
+                int textY = y + TEAM_NAME_V + (TEAM_NAME_H - 8) / 2;
+                g.drawString(font, teamText, textX, textY, 0xFFFFFF, false);
+
+                // 5. КНОПКИ
+                super.render(g, mouseX, mouseY, partialTick);
+            }
+        };
+        minecraft.setScreen(leaveScreen);
     }
 
     private Button addTransparentButton(int x, int y, int w, int h, Runnable action, Component tooltip) {
@@ -273,9 +310,6 @@ public class TeamScreen extends Screen {
         }
     }
 
-    private void leaveTeam(String teamName) {
-        minecraft.setScreen(new LeaveTeamConfirmScreen(this, teamName));
-    }
 
     @Override
     public void render(GuiGraphics g, int mx, int my, float pt) {
@@ -468,6 +502,15 @@ public class TeamScreen extends Screen {
             if (this.isHovered()) {
                 g.fill(this.getX(), this.getY(), this.getX() + this.width, this.getY() + this.height, 0x30FFFFFF);
             }
+        }
+    }
+
+    private void onCancel() {
+        if (parentScreen != null) {
+            // Возвращаемся в тот экран, откуда пришли
+            minecraft.setScreen(parentScreen);
+        } else {
+            minecraft.setScreen(null);
         }
     }
 }
