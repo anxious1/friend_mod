@@ -12,7 +12,7 @@ import net.minecraft.resources.ResourceLocation;
 
 public class CustomizationScreen extends Screen {
 
-    private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/customization_background.png");
+    public static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/customization_background.png");
 
     // Пимпочка и кнопка "Готово"
     private static final int PIMP_U = 15, PIMP_V = 198, PIMP_W = 10, PIMP_H = 10;
@@ -23,8 +23,8 @@ public class CustomizationScreen extends Screen {
     private static final int COMPASS_U = 1,  COMPASS_V = 182, COMPASS_W = 17, COMPASS_H = 14;
     private static final int FF_U = 1,       FF_V = 197,      FF_W = 12,   FF_H = 12;
 
-    private static final int GUI_WIDTH = 256;
-    private static final int GUI_HEIGHT = 170;
+    public static final int GUI_WIDTH = 256;
+    public static final int GUI_HEIGHT = 170;
 
     private final Screen parent;
     private final TeamManager.Team team;
@@ -76,10 +76,6 @@ public class CustomizationScreen extends Screen {
         addToggle(guiX + 145, guiY + 106, 0, FF_U,      FF_V,      FF_W,      FF_H,      "Переключить режим дружественного огня");
         addToggle(guiX + 145, guiY + 76,  1, COMPASS_U, COMPASS_V, COMPASS_W, COMPASS_H, "Переключить отображение участников на компасе");
         addToggle(guiX + 145, guiY + 46,  2, TAG_U,     TAG_V,     TAG_W,     TAG_H,     "Переключить отображение тега команды");
-
-        // === КНОПКА «НАЗАД» ===
-        addRenderableWidget(Button.builder(Component.literal("Назад"), b -> minecraft.setScreen(parent))
-                .pos(guiX + 10, guiY - 25).size(100, 20).build());
 
         // 4 КНОПКИ ДОСТИЖЕНИЙ СПРАВА (25×25)
         addTransparentButton(guiX + 230 - 9, guiY - 10 - 11+8+5+22+12+2+4+2-1,  23, 23, this::openAchivPicker1, Component.literal("Достижение 1"));
@@ -331,8 +327,11 @@ public class CustomizationScreen extends Screen {
     }
 
     private void deleteTeam() {
-        NetworkHandler.INSTANCE.sendToServer(new DeleteTeamPacket(team.getName()));
-        minecraft.setScreen(parent);
+        minecraft.setScreen(new DeleteTeamScreen(
+                CustomizationScreen.this,
+                team.getName(),
+                team.getTag()
+        ));
     }
 
     @Override

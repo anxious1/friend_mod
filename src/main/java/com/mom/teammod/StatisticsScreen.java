@@ -14,8 +14,10 @@ public class StatisticsScreen extends Screen {
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
             "textures/gui/statistics_background.png");
 
-    private static final int GUI_WIDTH  = 217;
-    private static final int GUI_HEIGHT = 105;
+    private static final int GUI_WIDTH  = 220;   // было 217 → стало 220
+    private static final int GUI_HEIGHT = 118;   // было 105 → стало 145
+    private int left() { return (width - GUI_WIDTH) / 2; }
+    private int top()  { return (height - GUI_HEIGHT) / 2; }
 
     // Список всех 8 строк статистики (статично, для теста)
     private final String[] statsLines = {
@@ -36,7 +38,7 @@ public class StatisticsScreen extends Screen {
     private static final int VISIBLE_LINES = 4;
     private static final int LINE_HEIGHT = 15;
     private static final int TOTAL_VISIBLE_HEIGHT = VISIBLE_LINES * LINE_HEIGHT; // 60 пикселей
-    private static final int SCROLLER_HEIGHT = 27;
+    private static final int SCROLLER_HEIGHT = 27;        // 144.52 - 118.52 = 26
     private static final int SCROLL_TRACK_HEIGHT = 60;
 
     public StatisticsScreen(Component title) {
@@ -50,6 +52,26 @@ public class StatisticsScreen extends Screen {
 
         int x = (width - GUI_WIDTH) / 2;
         int y = (height - GUI_HEIGHT) / 2;
+
+        // Добавь после всех кнопок в init():
+        addRenderableWidget(new Button(left() + 86, top() + 89, 47, 14, Component.empty(),
+                b -> {
+                    ClientState.hidePlayerRender = false;
+                    minecraft.setScreen(new MyProfileScreen(
+                            StatisticsScreen.this,  // ← текущий экран (this)
+                            Component.translatable("gui.teammod.profile")
+                    ));
+                },
+                (narration) -> Component.empty())
+        {
+            @Override
+            protected void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                g.blit(ATLAS, getX(), getY(), 86, 89, 47, 14, 256, 256);
+                if (isHovered()) {
+                    g.fill(getX(), getY(), getX() + width, getY() + height, 0x40FFFFFF);
+                }
+            }
+        });
     }
 
     @Override
@@ -94,7 +116,7 @@ public class StatisticsScreen extends Screen {
             scrollerY += (int) (ratio * travel);
         }
 
-        g.blit(ATLAS, scrollerX, scrollerY, 0, 105, 7, SCROLLER_HEIGHT, 256, 256);
+        g.blit(ATLAS, scrollerX, scrollerY, 0, 118, 6, 27, 256, 256);
     }
 
     // === Скролл колёсиком ===

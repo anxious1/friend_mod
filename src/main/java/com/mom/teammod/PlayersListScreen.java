@@ -468,10 +468,13 @@ public class PlayersListScreen extends Screen {
 
         private void onClickName() {
             if (entry.id.equals(minecraft.player.getUUID())) {
-                // Открыть свой профиль
-                minecraft.setScreen(new MyProfileScreen(Component.literal("Мой профиль")));
+                // Открываем свой профиль, передаём текущий экран как parent
+                minecraft.setScreen(new MyProfileScreen(
+                        PlayersListScreen.this,  // ← ВОТ ЭТО ГЛАВНОЕ!
+                        Component.translatable("gui.teammod.profile")
+                ));
             } else {
-                // Открыть чужой профиль (даже если оффлайн)
+                // Чужой профиль — всё ок, ты уже передаёшь parent
                 minecraft.setScreen(new OtherPlayerProfileScreen(
                         entry.id,
                         PlayersListScreen.this,

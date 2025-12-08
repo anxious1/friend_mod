@@ -65,7 +65,11 @@ public class TeamsListScreen extends Screen {
                 left() + 10 + 22,
                 top() + 179 - 38,
                 30, 12,
-                () -> minecraft.setScreen(new TeamScreen(null, minecraft.player.getInventory(), Component.translatable("gui.teammod.team_tab"))),
+                () -> minecraft.setScreen(new TeamScreen(
+                TeamsListScreen.this,                                      // ← parentScreen
+                new TeamMenu(0, minecraft.player.getInventory()),         // ← создаём меню
+                minecraft.player.getInventory(),
+                Component.translatable("gui.teammod.team_tab"))),
                 Component.literal("Назад")
         );
 
@@ -83,7 +87,12 @@ public class TeamsListScreen extends Screen {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == 256) { // 256 = клавиша ESC
-            minecraft.setScreen(new TeamScreen(null, minecraft.player.getInventory(), Component.translatable("gui.teammod.team_tab")));
+            minecraft.setScreen(new TeamScreen(
+                    TeamsListScreen.this,
+                    new TeamMenu(0, minecraft.player.getInventory()),
+                    minecraft.player.getInventory(),
+                    Component.translatable("gui.teammod.team_tab")
+            ));
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
@@ -151,6 +160,7 @@ public class TeamsListScreen extends Screen {
     }
 
     private void repositionSlots() {
+        // Удаляем только виджеты TeamSlotWidget
         this.renderables.removeIf(w -> w instanceof TeamSlotWidget);
 
         int baseX = left() + 45 - 21;
@@ -161,7 +171,7 @@ public class TeamsListScreen extends Screen {
             if (index >= filteredTeams.size()) break;
 
             TeamEntry entry = filteredTeams.get(index);
-            int y = baseY + i * SLOT_HEIGHT;
+            int y = baseY + i * (SLOT_HEIGHT - 2);
             addRenderableWidget(new TeamSlotWidget(baseX, y, entry));
         }
     }
@@ -251,22 +261,32 @@ public class TeamsListScreen extends Screen {
         refreshTeamList(); // Оставляем — но теперь он не сбрасывает скролл
     }
 
-    private class TeamSlotWidget extends AbstractWidget {
+    private class TeamSlotWidget extends Button {
         private final TeamEntry entry;
 
         public TeamSlotWidget(int x, int y, TeamEntry entry) {
-            super(x, y, 167, 23, Component.empty());
+            super(x, y, 167, 23, Component.empty(), btn -> {
+                // При клике открываем профиль команды
+                openTeamProfile(entry.team);
+            }, DEFAULT_NARRATION);
             this.entry = entry;
         }
 
         @Override
         protected void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-            boolean full = TeamManager.clientPlayerTeams.getOrDefault(minecraft.player.getUUID(), Collections.emptySet()).size() >= 3;
-            boolean disabled = entry.isMember || full;
-
-            int u = disabled ? UNAVAIL_U : AVAIL_U;
-            int v = disabled ? UNAVAIL_V : AVAIL_V;
-            int h = disabled ? UNAVAIL_H : AVAIL_H;
+            // Убрать проверку на isMember и full - кнопка всегда кликабельна для просмотра
+            int u, v, h;
+            if (this.isHovered()) {
+                // Наведение - avail (даже для своих команд)
+                u = AVAIL_U;
+                v = AVAIL_V;
+                h = AVAIL_H;
+            } else {
+                // Базовое состояние - unavail
+                u = UNAVAIL_U;
+                v = UNAVAIL_V;
+                h = UNAVAIL_H;
+            }
 
             RenderSystem.setShaderTexture(0, ATLAS);
             g.blit(ATLAS, getX(), getY(), u, v, width, h, 256, 256);
@@ -275,21 +295,52 @@ public class TeamsListScreen extends Screen {
             if (!entry.team.getTag().isEmpty()) text += "[" + entry.team.getTag() + "]";
             g.drawString(font, text, getX() + 8, getY() + 8, 0xFFFFFF, false);
 
-            if (!entry.isMember && !full && this.isHovered()) {
-                g.blit(ATLAS, getX() + width - REQUEST_W - 5, getY() + height - REQUEST_H - 3,
-                        REQUEST_U, REQUEST_V, REQUEST_W, REQUEST_H, 256, 256);
+            // Показываем "request" только при наведении на НЕ свою команду
+            if (this.isHovered() && !entry.isMember) {
+                boolean full = TeamManager.clientPlayerTeams.getOrDefault(minecraft.player.getUUID(), Collections.emptySet()).size() >= 3;
+                if (!full) {
+                    g.blit(ATLAS, getX() + width - REQUEST_W - 5, getY() + height - REQUEST_H - 3,
+                            REQUEST_U, REQUEST_V, REQUEST_W, REQUEST_H, 256, 256);
+                }
             }
         }
 
         @Override
-        public void onClick(double mx, double my) {
-            if (!entry.isMember && TeamManager.clientPlayerTeams.getOrDefault(minecraft.player.getUUID(), Collections.emptySet()).size() < 3) {
-                // TODO: запрос на вступление
+        public void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {}
+    }
+
+    // Добавить этот метод в основной класс TeamsListScreen:
+    private void openTeamProfile(TeamManager.Team team) {
+        if (team != null) {
+            // Проверяем, является ли игрок участником этой команды
+            boolean isMember = TeamManager.clientPlayerTeams.getOrDefault(minecraft.player.getUUID(), Collections.emptySet())
+                    .contains(team.getName());
+
+            if (isMember) {
+                // Если игрок - участник, открываем его профиль команды (TeamProfileOwner)
+                minecraft.setScreen(new TeamProfileOwner(
+                        null, // TeamMenu может быть null
+                        minecraft.player.getInventory(),
+                        Component.literal(team.getName()),
+                        team.getName(),
+                        team.getTag(),
+                        team.showTag(),
+                        team.showCompass(),
+                        team.isFriendlyFire()
+                ));
+            } else {
+                // Если игрок НЕ участник, открываем просмотр чужой команды (OtherTeamProfileScreen)
+                minecraft.setScreen(new OtherTeamProfileScreen(
+                        TeamsListScreen.this, // parent screen
+                        team.getName(),
+                        team.getTag(),
+                        team.showTag(),
+                        team.showCompass(),
+                        team.isFriendlyFire(),
+                        team.getOwner() // передаем UUID владельца
+                ));
             }
         }
-
-        @Override
-        protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {}
     }
 
     private static class TeamEntry {
