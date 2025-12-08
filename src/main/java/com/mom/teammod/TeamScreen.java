@@ -4,6 +4,7 @@ import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.ImageButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
@@ -71,10 +72,10 @@ public class TeamScreen extends Screen {
     private int lastRenderedScrollOffset = -1;
     private static final int SCROLL_TRACK_HEIGHT = 119;
 
-    public TeamScreen(TeamMenu menu, Inventory playerInventory, Component title) {
+    public TeamScreen(Screen parentScreen, TeamMenu menu, Inventory playerInventory, Component title) {
         super(title);
+        this.parentScreen = parentScreen;
         this.playerInventory = playerInventory;
-        this.parentScreen = parentScreen; // Сохраняем ссылку
     }
 
     private Button addAtlasButton(int x, int y, int w, int h, int u, int v, Runnable action, Component tooltip) {
@@ -98,14 +99,105 @@ public class TeamScreen extends Screen {
         scrollOffset = 0;
         lastRenderedScrollOffset = -1;
 
-        int guiX = (width - GUI_WIDTH) / 2;
-        int guiY = (height - GUI_HEIGHT) / 2;
+        int guiX = (width - 256) / 2;
+        int guiY = (height - 170) / 2;
+        int baseY = guiY - 26;
 
+        ResourceLocation unpress = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/unpress.png");
+        ResourceLocation press   = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/press.png");
+
+        ResourceLocation INV_ICON       = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/inv_icon.png");
+        ResourceLocation TEAM_LIST_ICON = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/team_list_icon.png");
+        ResourceLocation PROFILE_ICON   = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/profile_icon.png");
+
+        // КНОПКА ИНВЕНТАРЬ
+        this.addRenderableWidget(new Button(guiX + 2, baseY, 26, 27, Component.empty(), btn -> {
+            minecraft.setScreen(new InventoryScreen(minecraft.player));
+        }, supplier -> supplier.get()) {  // ← ЭТО РАБОТАЕТ В 1.20.1!
+            private boolean isPressed = false;
+
+            @Override
+            public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                boolean active = this.isHovered() || isPressed;
+                ResourceLocation tex = active ? press : unpress;
+                int h = active ? 29 : 27;
+                int yOff = active ? -2 : 0;
+
+                if (this.getHeight() != h) {
+                    this.setHeight(h);
+                    this.setY(baseY + yOff);
+                }
+
+                g.blit(tex, getX(), getY(), 0, 0, 26, h, 26, h);
+                g.blit(INV_ICON, getX() + 5, getY() + (active ? 7 : 6), 0, 0, 16, 16, 16, 16);
+
+                if (this.isHovered()) {
+                    g.renderTooltip(font, Component.translatable("gui.teammod.button3"), mx, my);
+                }
+            }
+
+            @Override
+            public void onClick(double mouseX, double mouseY) {
+                super.onClick(mouseX, mouseY);
+                this.isPressed = true;
+            }
+        });
+
+        // КНОПКА КОМАНДЫ — ЗАЖАТА
+        int teamX = guiX + 2 + 26 + 52;
+        this.addRenderableWidget(new Button(teamX, baseY - 2, 26, 29, Component.empty(), btn -> {
+            // Уже здесь — ничего не делаем
+        }, supplier -> supplier.get()) {
+            @Override
+            public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                g.blit(press, getX(), getY(), 0, 0, 26, 29, 26, 29);
+                g.blit(TEAM_LIST_ICON, getX() + 5, getY() + 6, 0, 0, 16, 16, 16, 16);
+
+                if (this.isHovered()) {
+                    g.renderTooltip(font, Component.translatable("gui.teammod.team_tab"), mx, my);
+                }
+            }
+        });
+
+        // КНОПКА ПРОФИЛЬ
+        int profileX = teamX + 26;
+        this.addRenderableWidget(new Button(profileX, baseY, 26, 27, Component.empty(), btn -> {
+            minecraft.setScreen(new MyProfileScreen(TeamScreen.this, Component.translatable("gui.teammod.profile")));
+        }, supplier -> supplier.get()) {
+            private boolean isPressed = false;
+
+            @Override
+            public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                boolean active = this.isHovered() || isPressed;
+                ResourceLocation tex = active ? press : unpress;
+                int h = active ? 29 : 27;
+                int yOff = active ? -2 : 0;
+
+                if (this.getHeight() != h) {
+                    this.setHeight(h);
+                    this.setY(baseY + yOff);
+                }
+
+                g.blit(tex, getX(), getY(), 0, 0, 26, h, 26, h);
+                g.blit(PROFILE_ICON, getX() + 5, getY() + (active ? 7 : 6), 0, 0, 16, 16, 16, 16);
+
+                if (this.isHovered()) {
+                    g.renderTooltip(font, Component.translatable("gui.teammod.profile"), mx, my);
+                }
+            }
+
+            @Override
+            public void onClick(double mouseX, double mouseY) {
+                super.onClick(mouseX, mouseY);
+                this.isPressed = true;
+            }
+        });
+
+        // ТВОЙ СТАРЫЙ КОД — НЕ ТРОГАЙ!
         UUID playerId = minecraft.player.getUUID();
         Set<String> playerTeams = clientPlayerTeams.getOrDefault(playerId, Set.of());
         List<String> playerTeamList = new ArrayList<>(playerTeams);
 
-        // === Y позиции: 36, 73, 110 ===
         int[] yPositions = {36, 73, 110};
 
         for (int slot = 0; slot < 3; slot++) {
@@ -115,7 +207,6 @@ public class TeamScreen extends Screen {
                 String teamName = playerTeamList.get(slot);
                 TeamManager.Team team = TeamManager.getTeam(teamName);
 
-                // === Плашка команды — НЕ кликабельная, чисто визуальная ===
                 int plashkaX = guiX + 10 - 1;
                 int plashkaY = guiY + y - 5 - 5 - 1;
 
@@ -124,7 +215,6 @@ public class TeamScreen extends Screen {
                     public void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
                         RenderSystem.setShaderTexture(0, ATLAS);
                         g.blit(ATLAS, getX(), getY(), PLASHKA_U, PLASHKA_V, PLASHKA_W, PLASHKA_H, 256, 256);
-
                         g.blit(ATLAS, getX() + PLASHKA_W - ZVEZDA_W - 4, getY() + 4,
                                 ZVEZDA_U, ZVEZDA_V, ZVEZDA_W, ZVEZDA_H, 256, 256);
 
@@ -134,14 +224,10 @@ public class TeamScreen extends Screen {
                         g.drawString(font, display, textX, textY, 0xFFFFFF, false);
                     }
 
-                    @Override
-                    public boolean isMouseOver(double mouseX, double mouseY) { return false; }
-
-                    @Override
-                    protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {}
+                    @Override public boolean isMouseOver(double mouseX, double mouseY) { return false; }
+                    @Override protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {}
                 });
 
-                // Кнопки "Профиль" и "Покинуть" — как и было
                 addAtlasButton(guiX + 108 + 5, guiY + y, PROFILE_BTN_W, PROFILE_BTN_H,
                         PROFILE_BTN_U, PROFILE_BTN_V,
                         () -> openTeamProfile(teamName), Component.literal("Профиль"));
@@ -151,7 +237,6 @@ public class TeamScreen extends Screen {
                         () -> openLeaveTeam(teamName, team),
                         Component.literal("Покинуть"));
             } else {
-                // === Пустой слот — показываем кнопки ===
                 addTransparentButton(guiX + 17, guiY + y, 28, 13,
                         this::openJoinList, Component.literal("Присоединиться"));
 
@@ -160,27 +245,17 @@ public class TeamScreen extends Screen {
             }
         }
 
-        // PIMP 1 — компас
         final boolean[] compassEnabled = {false};
-        addPimpButton(
-                guiX + 44, guiY + 147, 14, 14,
-                16, 138, 15, 14,
+        addPimpButton(guiX + 44, guiY + 147, 14, 14, 16, 138, 15, 14,
                 COMPASS_U, COMPASS_V, COMPASS_W, COMPASS_H,
-                "Вкл. / Выкл. командный компас для всех команд.",
-                compassEnabled
-        );
+                "Вкл. / Выкл. командный компас для всех команд.", compassEnabled);
 
-        // PIMP 2 — тег
-        final boolean[] tagEnabled = {true}; // по умолчанию включён
-        addPimpButton(
-                guiX + 153, guiY + 147, 14, 14,
-                113 - 81 - 28, 140, 28, 9,
+        final boolean[] tagEnabled = {true};
+        addPimpButton(guiX + 153, guiY + 147, 14, 14, 113 - 81 - 28, 140, 28, 9,
                 TAG_U, TAG_V, TAG_W, TAG_H,
-                "Вкл. / Выкл. отображение тега выбранной команды.",
-                tagEnabled
-        );
+                "Вкл. / Выкл. отображение тега выбранной команды.", tagEnabled);
 
-        renderTeamList(null); // ← ЭТО ГЛАВНОЕ! Создаём кнопки при открытии
+        renderTeamList(null);
     }
 
     private void openLeaveTeam(String teamName, TeamManager.Team team) {

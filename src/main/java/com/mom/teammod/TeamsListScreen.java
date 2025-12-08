@@ -65,7 +65,11 @@ public class TeamsListScreen extends Screen {
                 left() + 10 + 22,
                 top() + 179 - 38,
                 30, 12,
-                () -> minecraft.setScreen(new TeamScreen(null, minecraft.player.getInventory(), Component.translatable("gui.teammod.team_tab"))),
+                () -> minecraft.setScreen(new TeamScreen(
+                TeamsListScreen.this,                                      // ← parentScreen
+                new TeamMenu(0, minecraft.player.getInventory()),         // ← создаём меню
+                minecraft.player.getInventory(),
+                Component.translatable("gui.teammod.team_tab"))),
                 Component.literal("Назад")
         );
 
@@ -83,7 +87,12 @@ public class TeamsListScreen extends Screen {
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
         if (keyCode == 256) { // 256 = клавиша ESC
-            minecraft.setScreen(new TeamScreen(null, minecraft.player.getInventory(), Component.translatable("gui.teammod.team_tab")));
+            minecraft.setScreen(new TeamScreen(
+                    TeamsListScreen.this,
+                    new TeamMenu(0, minecraft.player.getInventory()),
+                    minecraft.player.getInventory(),
+                    Component.translatable("gui.teammod.team_tab")
+            ));
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);

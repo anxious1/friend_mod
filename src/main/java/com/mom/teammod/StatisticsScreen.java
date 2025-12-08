@@ -57,7 +57,10 @@ public class StatisticsScreen extends Screen {
         addRenderableWidget(new Button(left() + 86, top() + 89, 47, 14, Component.empty(),
                 b -> {
                     ClientState.hidePlayerRender = false;
-                    minecraft.setScreen(new MyProfileScreen(Component.literal("Мой профиль")));
+                    minecraft.setScreen(new MyProfileScreen(
+                            StatisticsScreen.this,  // ← текущий экран (this)
+                            Component.translatable("gui.teammod.profile")
+                    ));
                 },
                 (narration) -> Component.empty())
         {

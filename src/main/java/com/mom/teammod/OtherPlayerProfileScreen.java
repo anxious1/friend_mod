@@ -3,6 +3,7 @@ package com.mom.teammod;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.ImageButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
@@ -103,27 +104,125 @@ public class OtherPlayerProfileScreen extends Screen {
 
     @Override
     protected void init() {
-        super.init();
+        super.init(); // ← Обязательно первым!
         scrollOffset = 0;
         lastRenderedScrollOffset = -1;
 
+        // === УНИВЕРСАЛЬНЫЕ КНОПКИ НАВИГАЦИИ ===
+        {
+            ResourceLocation unpress = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/unpress.png");
+            ResourceLocation press   = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/press.png");
+
+            ResourceLocation INV_ICON       = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/inv_icon.png");
+            ResourceLocation TEAM_LIST_ICON = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/team_list_icon.png");
+            ResourceLocation PROFILE_ICON   = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/profile_icon.png");
+
+            int guiX  = (width  - 256) / 2;
+            int baseY = (height - 170) / 2 - 26;
+
+            // === КНОПКА ИНВЕНТАРЬ ===
+            int invX = guiX + 2;
+            this.addRenderableWidget(new ImageButton(invX, baseY, 26, 27, 0, 0, 0, unpress, button -> {
+                minecraft.setScreen(new InventoryScreen(minecraft.player));
+            }) {
+                private boolean isPressed = false;
+
+                @Override
+                public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                    boolean active = this.isHoveredOrFocused() || isPressed;
+                    ResourceLocation tex = active ? press : unpress;
+                    int h = active ? 29 : 27;
+                    int yOff = active ? -2 : 0;
+
+                    if (this.getHeight() != h) {
+                        this.setHeight(h);
+                        this.setY(baseY + yOff);
+                    }
+
+                    g.blit(tex, getX(), getY(), 0, 0, 26, h, 26, h);
+                    g.blit(INV_ICON, getX() + 5, getY() + (active ? 7 : 6), 0, 0, 16, 16, 16, 16);
+
+                    if (this.isHoveredOrFocused())
+                        g.renderTooltip(font, Component.translatable("gui.teammod.button3"), mx, my);
+                }
+
+                @Override
+                public void onClick(double mouseX, double mouseY) {
+                    super.onClick(mouseX, mouseY);
+                    this.isPressed = true;
+                }
+            });
+
+            // === КНОПКА КОМАНДЫ — зажата (ты смотришь чужой профиль) ===
+            int teamX = invX + 26 + 52;
+            this.addRenderableWidget(new ImageButton(teamX, baseY - 2, 26, 29, 0, 0, 0, press, button -> {
+                // Клик по зажатой → открываем ТВОИ команды
+                minecraft.setScreen(new TeamScreen(
+                        OtherPlayerProfileScreen.this,
+                        new TeamMenu(0, minecraft.player.getInventory()),
+                        minecraft.player.getInventory(),
+                        Component.translatable("gui.teammod.team_tab")
+                ));
+            }) {
+                @Override
+                public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                    g.blit(press, getX(), getY(), 0, 0, 26, 29, 26, 29);
+                    g.blit(TEAM_LIST_ICON, getX() + 5, getY() + 6, 0, 0, 16, 16, 16, 16);
+
+                    if (this.isHoveredOrFocused())
+                        g.renderTooltip(font, Component.translatable("gui.teammod.team_tab"), mx, my);
+                }
+            });
+
+            // === КНОПКА ПРОФИЛЬ ===
+            int profileX = teamX + 26;
+            this.addRenderableWidget(new ImageButton(profileX, baseY, 26, 27, 0, 0, 0, unpress, button -> {
+                minecraft.setScreen(new MyProfileScreen(OtherPlayerProfileScreen.this,
+                        Component.translatable("gui.teammod.profile")));
+            }) {
+                private boolean isPressed = false;
+
+                @Override
+                public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                    boolean active = this.isHoveredOrFocused() || isPressed;
+                    ResourceLocation tex = active ? press : unpress;
+                    int h = active ? 29 : 27;
+                    int yOff = active ? -2 : 0;
+
+                    if (this.getHeight() != h) {
+                        this.setHeight(h);
+                        this.setY(baseY + yOff);
+                    }
+
+                    g.blit(tex, getX(), getY(), 0, 0, 26, h, 26, h);
+                    g.blit(PROFILE_ICON, getX() + 5, getY() + (active ? 7 : 6), 0, 0, 16, 16, 16, 16);
+
+                    if (this.isHoveredOrFocused())
+                        g.renderTooltip(font, Component.translatable("gui.teammod.profile"), mx, my);
+                }
+
+                @Override
+                public void onClick(double mouseX, double mouseY) {
+                    super.onClick(mouseX, mouseY);
+                    this.isPressed = true;
+                }
+            });
+        }
+
+        // === ТВОЙ ОСТАЛЬНОЙ КОД (оставляем как есть) ===
         int guiX = (width - GUI_WIDTH) / 2;
         int guiY = (height - GUI_HEIGHT) / 2;
 
         InviteButtonState buttonState = getInviteButtonState();
 
-        // В методе init() класса OtherPlayerProfileScreen заменить:
         if (buttonState == InviteButtonState.NONE) {
-            // Прозрачная кнопка на позиции invite_off
             int buttonX = guiX + (GUI_WIDTH - INVITE_OFF_W) / 2 - 23;
             int buttonY = guiY + GUI_HEIGHT - INVITE_OFF_H - 16;
 
             addTransparentButton(buttonX, buttonY, INVITE_OFF_W, INVITE_OFF_H,
-                    this::openMyTeamsList, // ← ИЗМЕНИТЬ
-                    Component.literal("Пригласить в команду")); // ← ИЗМЕНИТЬ
+                    this::openMyTeamsList,
+                    Component.literal("Пригласить в команду"));
         }
-        // Состояние 2: текстура invite_off, НЕТ кнопки - ничего не создаем
-        // Состояние 3: текстура accept_join, ЕСТЬ кнопка с текстурой
         else if (buttonState == InviteButtonState.ACCEPT_JOIN) {
             int acceptX = guiX + (GUI_WIDTH - ACCEPT_JOIN_W) / 2 - 23;
             int acceptY = guiY + GUI_HEIGHT - ACCEPT_JOIN_H - 26;
@@ -140,7 +239,6 @@ public class OtherPlayerProfileScreen extends Screen {
             });
         }
 
-        // Кнопка "Подробная статистика"
         addTransparentButton(guiX + 110, guiY + 114, 86, 14,
                 this::openDetailedStats,
                 Component.literal("Подробная статистика"));
