@@ -5,13 +5,14 @@ import com.mom.teammod.TeamManager;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
+import net.minecraftforge.network.PacketDistributor;
 
 import java.util.UUID;
 import java.util.function.Supplier;
 
 public class TransferOwnershipPacket {
     private String teamName;
-    private UUID newOwnerUUID;
+    UUID newOwnerUUID;
 
     public TransferOwnershipPacket(String teamName, UUID newOwnerUUID) {
         this.teamName = teamName;
@@ -29,14 +30,25 @@ public class TransferOwnershipPacket {
 
     public static void handle(TransferOwnershipPacket pkt, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
-            if (TeamManager.transferOwnership(pkt.teamName, pkt.newOwnerUUID, ctx.get().getSender().getUUID())) {
-                // Синхронизировать
+            boolean success = TeamManager.transferOwnership(
+                    pkt.teamName,
+                    pkt.newOwnerUUID,
+                    ctx.get().getSender().getUUID()
+            );
+
+            if (success) {
                 TeamManager.Team team = TeamManager.getServerTeam(pkt.teamName);
                 if (team != null) {
-                    for (UUID member : team.getMembers()) {
-                        ServerPlayer player = ctx.get().getSender().getServer().getPlayerList().getPlayer(member);
+                    TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName);
+
+                    for (UUID memberUUID : team.getMembers()) {
+                        ServerPlayer player = ctx.get().getSender().getServer()
+                                .getPlayerList().getPlayer(memberUUID);
                         if (player != null) {
-                            NetworkHandler.INSTANCE.sendTo(new TeamSyncPacket(pkt.teamName), player.connection.connection, net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT);
+                            NetworkHandler.INSTANCE.send(
+                                    PacketDistributor.PLAYER.with(() -> player),
+                                    syncPacket
+                            );
                         }
                     }
                 }

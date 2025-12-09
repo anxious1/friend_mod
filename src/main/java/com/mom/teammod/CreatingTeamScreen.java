@@ -270,7 +270,16 @@ public class CreatingTeamScreen extends Screen {
 
     private void createTeam() {
         String teamName = nameBox.getValue().trim();
-        NetworkHandler.INSTANCE.sendToServer(new CreateTeamPacket(teamName));
+        String tag = tagBox.getValue().trim();
+
+        NetworkHandler.INSTANCE.sendToServer(new CreateTeamPacket(
+                teamName,
+                tag,
+                friendlyFire,
+                showTag,
+                showCompass
+        ));
+
         minecraft.setScreen(parent);
     }
 

@@ -5,6 +5,7 @@ import com.mom.teammod.TeamManager;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
+import net.minecraftforge.network.PacketDistributor;
 
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -29,13 +30,22 @@ public class SetFriendlyFirePacket {
 
     public static void handle(SetFriendlyFirePacket pkt, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
-            if (TeamManager.setFriendlyFire(pkt.teamName, pkt.enabled, ctx.get().getSender().getUUID())) {
-                TeamManager.Team team = TeamManager.getTeam(pkt.teamName);
+            UUID ownerUUID = ctx.get().getSender().getUUID();
+
+            if (TeamManager.setFriendlyFire(pkt.teamName, pkt.enabled, ownerUUID)) {
+                TeamManager.Team team = TeamManager.getServerTeam(pkt.teamName);
                 if (team != null) {
-                    for (UUID member : team.getMembers()) {
-                        ServerPlayer player = ctx.get().getSender().getServer().getPlayerList().getPlayer(member);
+                    TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName);
+
+                    // Отправляем ВСЕМ участникам команды (включая владельца)
+                    for (UUID memberUUID : team.getMembers()) {
+                        ServerPlayer player = ctx.get().getSender().getServer()
+                                .getPlayerList().getPlayer(memberUUID);
                         if (player != null) {
-                            NetworkHandler.INSTANCE.sendTo(new TeamSyncPacket(pkt.teamName), player.connection.connection, net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT);
+                            NetworkHandler.INSTANCE.send(
+                                    PacketDistributor.PLAYER.with(() -> player),
+                                    syncPacket
+                            );
                         }
                     }
                 }

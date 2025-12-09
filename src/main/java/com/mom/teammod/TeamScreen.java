@@ -403,15 +403,79 @@ public class TeamScreen extends Screen {
 
 
     public void refreshLists() {
-        UUID playerUUID = minecraft.player.getUUID();
-        clientPlayerTeams.put(playerUUID, new HashSet<>(TeamManager.playerTeams.getOrDefault(playerUUID, Set.of())));
-        clientTeams.clear();
-        clientTeams.putAll(TeamManager.teams);
-    }
+        // НИЧЕГО НЕ ОЧИЩАЕМ! Мы работаем с теми же мапами, что и TeamSyncPacket
 
-    private <T extends AbstractWidget> T addRenderableOnly(T widget) {
-        this.renderables.add(widget);
-        return widget;
+        // Просто удаляем старые ячейки и кнопки
+        this.children().removeIf(widget ->
+                widget instanceof AbstractWidget && !(widget instanceof Button && ((Button)widget).getMessage().getString().contains("Инвентарь"))
+        );
+        this.renderables.removeIf(widget -> widget instanceof AbstractWidget);
+
+        // Заново создаём ТОЛЬКО ячейки команд (левые 3 слота)
+        UUID playerId = minecraft.player.getUUID();
+        Set<String> playerTeamsSet = TeamManager.clientPlayerTeams.getOrDefault(playerId, Set.of());
+        List<String> playerTeamList = new ArrayList<>(playerTeamsSet);
+
+        int guiX = (width - 256) / 2;
+        int guiY = (height - 170) / 2;
+        int[] yPositions = {36, 73, 110};
+
+        for (int slot = 0; slot < 3; slot++) {
+            int y = yPositions[slot];
+
+            if (slot < playerTeamList.size()) {
+                String teamName = playerTeamList.get(slot);
+                TeamManager.Team team = TeamManager.clientTeams.get(teamName);
+
+                int plashkaX = guiX + 10 - 1;
+                int plashkaY = guiY + y - 5 - 5 - 1;
+
+                // Плашка
+                addRenderableOnly(new AbstractWidget(plashkaX, plashkaY, PLASHKA_W, PLASHKA_H, Component.empty()) {
+                    @Override
+                    public void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+                        RenderSystem.setShaderTexture(0, ATLAS);
+                        g.blit(ATLAS, getX(), getY(), PLASHKA_U, PLASHKA_V, PLASHKA_W, PLASHKA_H, 256, 256);
+                        g.blit(ATLAS, getX() + PLASHKA_W - ZVEZDA_W - 4, getY() + 4,
+                                ZVEZDA_U, ZVEZDA_V, ZVEZDA_W, ZVEZDA_H, 256, 256);
+
+                        String display = teamName + (team != null && !team.getTag().isEmpty() ? "[" + team.getTag() + "]" : "");
+                        int textX = getX() + PLASHKA_W / 2 - font.width(display) / 2;
+                        int textY = getY() + (PLASHKA_H - 9) / 2;
+                        g.drawString(font, display, textX, textY, 0xFFFFFF, false);
+                    }
+
+                    @Override public boolean isMouseOver(double mouseX, double mouseY) { return false; }
+                    @Override protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {}
+                });
+
+                // Кнопки "Профиль" и "Покинуть"
+                addAtlasButton(guiX + 108 + 5, guiY + y, PROFILE_BTN_W, PROFILE_BTN_H,
+                        PROFILE_BTN_U, PROFILE_BTN_V,
+                        () -> openTeamProfile(teamName), Component.literal("Профиль"));
+
+                addAtlasButton(guiX + 158 + 3, guiY + y, LEAVE_BTN_W, LEAVE_BTN_H,
+                        LEAVE_BTN_U, LEAVE_BTN_V,
+                        () -> openLeaveTeam(teamName, team),
+                        Component.literal("Покинуть"));
+            } else {
+                // Пустые слоты — кнопки "Присоединиться" и "Создать"
+                addTransparentButton(guiX + 17, guiY + y, 28, 13,
+                        this::openJoinList, Component.literal("Присоединиться"));
+
+                addTransparentButton(guiX + 58, guiY + y, 43, 13,
+                        this::openCreateTeam, Component.literal("Создать команду"));
+            }
+        }
+
+        // Обновляем правый список приглашений
+        teamList.clear();
+        for (TeamManager.Team team : TeamManager.clientTeams.values()) {
+            if (!playerTeamsSet.contains(team.getName())) {
+                teamList.add(team);
+            }
+        }
+        teamList.sort(Comparator.comparing(TeamManager.Team::getName));
     }
 
     private void renderTeamList(GuiGraphics g) {

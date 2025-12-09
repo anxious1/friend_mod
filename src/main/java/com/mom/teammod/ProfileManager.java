@@ -6,8 +6,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.network.NetworkDirection;
-import net.minecraftforge.server.ServerLifecycleHooks;
+import net.minecraftforge.network.PacketDistributor;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -21,28 +20,20 @@ public class ProfileManager {
 
     public static class Profile {
         private UUID playerUUID;
-        private String background = "profile_bg1"; // Default, варианты: profile_bg1, profile_bg2, profile_bg3
-        private Map<String, Integer> customStats = new HashMap<>(); // Пустые кастом статы, наполнишь позже
+        private String background = "profile_bg1";
+        private Map<String, Integer> customStats = new HashMap<>();
 
         public Profile(UUID playerUUID) {
             this.playerUUID = playerUUID;
-            // Placeholder кастом статы
             customStats.put("boss_kills", 0);
             customStats.put("custom_stat1", 0);
             customStats.put("custom_stat2", 0);
         }
 
-        public String getBackground() {
-            return background;
-        }
+        public String getBackground() { return background; }
+        public void setBackground(String bg) { this.background = bg; }
 
-        public void setBackground(String bg) {
-            this.background = bg;
-        }
-
-        public Map<String, Integer> getCustomStats() {
-            return customStats;
-        }
+        public Map<String, Integer> getCustomStats() { return customStats; }
 
         public CompoundTag serializeNBT() {
             CompoundTag tag = new CompoundTag();
@@ -64,29 +55,35 @@ public class ProfileManager {
     public static Profile getProfile(UUID playerUUID) {
         return profiles.computeIfAbsent(playerUUID, uuid -> {
             Profile profile = new Profile(uuid);
-            profile.setBackground("profile_bg1"); // дефолтный фон
+            profile.setBackground("profile_bg1");
             return profile;
         });
     }
+
     public static Profile getClientProfile(UUID playerUUID) {
         return clientProfiles.computeIfAbsent(playerUUID, uuid -> {
             Profile p = new Profile(uuid);
-            p.setBackground("profile_bg1"); // дефолт
+            p.setBackground("profile_bg1");
             return p;
         });
     }
 
+    // Главная правка: безопасная отправка профиля
     public static void syncProfileToClient(ServerPlayer player) {
         UUID uuid = player.getUUID();
         Profile profile = getProfile(uuid);
-        NetworkHandler.INSTANCE.sendTo(new ProfileSyncPacket(uuid, profile), player.connection.connection, NetworkDirection.PLAY_TO_CLIENT);
+
+        NetworkHandler.INSTANCE.send(
+                PacketDistributor.PLAYER.with(() -> player),
+                new ProfileSyncPacket(uuid, profile)
+        );
     }
 
     @SubscribeEvent
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            ProfileManager.getProfile(player.getUUID()); // ← создаём профиль
-            ProfileManager.syncProfileToClient(player);  // ← отправляем
+            getProfile(player.getUUID());           // создаём на сервере
+            syncProfileToClient(player);            // отправляем клиенту
         }
     }
 
@@ -96,5 +93,4 @@ public class ProfileManager {
         profiles.remove(uuid);
         clientProfiles.remove(uuid);
     }
-
 }

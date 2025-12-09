@@ -20,6 +20,7 @@ public class TeamSyncPacket {
     private final boolean friendlyFire;
     private final boolean showTag;
     private final boolean showCompass;
+    private final String tag; // ← теперь final
 
     // Конструктор для отправки с сервера
     public TeamSyncPacket(String teamName) {
@@ -27,14 +28,17 @@ public class TeamSyncPacket {
         if (serverTeam != null) {
             this.teamName = teamName;
             this.owner = serverTeam.getOwner();
-            this.members.addAll(serverTeam.getMembers());
-            this.invited.addAll(serverTeam.getInvited());
+            this.tag = serverTeam.getTag();
             this.friendlyFire = serverTeam.isFriendlyFire();
             this.showTag = serverTeam.showTag();
             this.showCompass = serverTeam.showCompass();
+
+            this.members.addAll(serverTeam.getMembers());
+            this.invited.addAll(serverTeam.getInvited());
         } else {
             this.teamName = teamName;
             this.owner = null;
+            this.tag = "";
             this.friendlyFire = true;
             this.showTag = true;
             this.showCompass = true;
@@ -47,14 +51,19 @@ public class TeamSyncPacket {
         this.owner = buf.readBoolean() ? buf.readUUID() : null;
 
         int memberCount = buf.readInt();
-        for (int i = 0; i < memberCount; i++) members.add(buf.readUUID());
+        for (int i = 0; i < memberCount; i++) {
+            members.add(buf.readUUID());
+        }
 
         int invitedCount = buf.readInt();
-        for (int i = 0; i < invitedCount; i++) invited.add(buf.readUUID());
+        for (int i = 0; i < invitedCount; i++) {
+            invited.add(buf.readUUID());
+        }
 
         this.friendlyFire = buf.readBoolean();
         this.showTag = buf.readBoolean();
         this.showCompass = buf.readBoolean();
+        this.tag = buf.readUtf(32767); // ← ЧИТАЕМ В ТОМ ЖЕ ПОРЯДКЕ!
     }
 
     public void encode(FriendlyByteBuf buf) {
@@ -71,11 +80,13 @@ public class TeamSyncPacket {
         buf.writeBoolean(friendlyFire);
         buf.writeBoolean(showTag);
         buf.writeBoolean(showCompass);
+        buf.writeUtf(tag); // ← ПИШЕМ В ТОМ ЖЕ ПОРЯДКЕ!
     }
 
     public static void handle(TeamSyncPacket pkt, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             TeamManager.Team team = new TeamManager.Team(pkt.teamName, pkt.owner);
+            team.setTag(pkt.tag);
             team.setFriendlyFire(pkt.friendlyFire);
             team.setShowTag(pkt.showTag);
             team.setShowCompass(pkt.showCompass);
@@ -90,7 +101,7 @@ public class TeamSyncPacket {
             UUID playerUUID = Minecraft.getInstance().player.getUUID();
             TeamManager.clientPlayerTeams.computeIfAbsent(playerUUID, k -> new HashSet<>()).add(pkt.teamName);
 
-            // Обновляем открытые экраны
+            // Обновляем TeamScreen, если открыт
             if (Minecraft.getInstance().screen instanceof TeamScreen screen) {
                 screen.refreshLists();
             }

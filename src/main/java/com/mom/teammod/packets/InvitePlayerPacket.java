@@ -3,12 +3,13 @@ package com.mom.teammod.packets;
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.TeamManager;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.network.NetworkEvent;
+import net.minecraftforge.network.PacketDistributor;
 
-import java.util.UUID;
 import java.util.function.Supplier;
 
 public class InvitePlayerPacket {
@@ -33,16 +34,40 @@ public class InvitePlayerPacket {
         ctx.get().enqueueWork(() -> {
             ServerPlayer inviter = ctx.get().getSender();
             ServerPlayer invited = inviter.getServer().getPlayerList().getPlayerByName(pkt.playerName);
-            if (invited != null && TeamManager.invitePlayer(pkt.teamName, invited.getUUID(), inviter)) {
-                Component acceptButton = Component.literal("[Accept]").setStyle(Component.empty().getStyle()
-                        .withClickEvent(new net.minecraft.network.chat.ClickEvent(net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND, "/accept " + pkt.teamName))
-                        .withHoverEvent(new net.minecraft.network.chat.HoverEvent(net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT, Component.literal("Accept invitation"))));
-                Component declineButton = Component.literal("[Decline]").setStyle(Component.empty().getStyle()
-                        .withClickEvent(new net.minecraft.network.chat.ClickEvent(net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND, "/decline " + pkt.teamName))
-                        .withHoverEvent(new net.minecraft.network.chat.HoverEvent(net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT, Component.literal("Decline invitation"))));
-                invited.sendSystemMessage(Component.literal("Invited to " + pkt.teamName + " by " + inviter.getName().getString() + ". ").append(acceptButton).append(" ").append(declineButton));
-                NetworkHandler.INSTANCE.sendTo(new TeamSyncPacket(pkt.teamName), invited.connection.connection, net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT);
-                NetworkHandler.INSTANCE.reply(new TeamSyncPacket(pkt.teamName), ctx.get());
+
+            if (invited == null) {
+                inviter.sendSystemMessage(Component.literal("§cИгрок не найден или не в сети."));
+                return;
+            }
+
+            if (TeamManager.invitePlayer(pkt.teamName, invited.getUUID(), inviter)) {
+                // Красивое сообщение с кнопками
+                Component acceptButton = Component.literal("[Принять]")
+                        .withStyle(style -> style
+                                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/teammod_accept " + pkt.teamName))
+                                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("§aПринять приглашение"))));
+
+                Component declineButton = Component.literal("[Отклонить]")
+                        .withStyle(style -> style
+                                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/teammod_decline " + pkt.teamName))
+                                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("§cОтклонить приглашение"))));
+
+                invited.sendSystemMessage(
+                        Component.literal("§eВы получили приглашение в команду §b" + pkt.teamName + " §eот §f" + inviter.getName().getString() + "§e. ")
+                                .append(acceptButton)
+                                .append(Component.literal(" "))
+                                .append(declineButton)
+                );
+
+                inviter.sendSystemMessage(Component.literal("§aПриглашение отправлено игроку §f" + pkt.playerName));
+
+                // Синхронизация — безопасно и без крашей
+                TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName);
+
+                NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> invited), syncPacket);
+                NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> inviter), syncPacket);
+            } else {
+                inviter.sendSystemMessage(Component.literal("§cНе удалось отправить приглашение (возможно, лимит команд или уже приглашён)."));
             }
         });
         ctx.get().setPacketHandled(true);

@@ -16,6 +16,7 @@ import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.network.NetworkDirection;
+import net.minecraftforge.network.PacketDistributor;
 import net.minecraftforge.server.ServerLifecycleHooks;
 import net.minecraft.world.entity.TamableAnimal;
 
@@ -163,7 +164,8 @@ public class TeamManager {
         return teams.get(teamName);
     }
 
-    public static boolean createTeam(String teamName, Player owner) {
+    // 2. createTeam — полностью исправлен
+    public static boolean createTeam(String teamName, String tag, boolean friendlyFire, boolean showTag, boolean showCompass, Player owner) {
         if (!(owner instanceof ServerPlayer serverOwner)) {
             return false;
         }
@@ -173,21 +175,24 @@ public class TeamManager {
         }
 
         Team team = new Team(teamName, owner.getUUID());
+
+        // ← ВОТ ЭТИ СТРОКИ ТЫ ЗАБЫЛ!
+        team.setTag(tag);
+        team.setFriendlyFire(friendlyFire);
+        team.setShowTag(showTag);
+        team.setShowCompass(showCompass);
+
         teams.put(teamName, team);
         playerTeams.computeIfAbsent(owner.getUUID(), k -> new HashSet<>()).add(teamName);
 
         serverOwner.sendSystemMessage(Component.translatable("commands.teammod.create.success", teamName));
 
-        // ПРАВИЛЬНАЯ ОТПРАВКА ПАКЕТА В 1.20.1+
-        NetworkHandler.INSTANCE.sendTo(
-                new TeamSyncPacket(teamName),
-                serverOwner.connection.connection,
-                NetworkDirection.PLAY_TO_CLIENT
-        );
-
+        syncTeamToAll(teamName);
         return true;
     }
 
+
+    // 3. invitePlayer — полностью исправлен
     public static boolean invitePlayer(String teamName, UUID player, Player inviter) {
         if (!(inviter instanceof ServerPlayer serverInviter)) {
             return false;
@@ -207,30 +212,29 @@ public class TeamManager {
                 invited.sendSystemMessage(Component.translatable("commands.teammod.invite.received", teamName, inviter.getName()));
                 serverInviter.sendSystemMessage(Component.translatable("commands.teammod.invite.success", invited.getName(), teamName));
             }
-            syncTeamToPlayers(teamName);
+            syncTeamToAll(teamName); // ← исправлено
             return true;
         }
         serverInviter.sendSystemMessage(Component.translatable("commands.teammod.invite.failed", "Player", teamName));
         return false;
     }
 
+    // 4. acceptInvitation — полностью исправлен
     public static boolean acceptInvitation(String teamName, UUID player) {
         Team team = teams.get(teamName);
         if (team == null || !team.getInvited().contains(player)) {
             MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-            if (server == null) return false;
-            ServerPlayer serverPlayer = server.getPlayerList().getPlayer(player);
-            if (serverPlayer != null) {
-                serverPlayer.sendSystemMessage(Component.translatable("commands.teammod.accept.failed", teamName));
+            if (server != null) {
+                ServerPlayer p = server.getPlayerList().getPlayer(player);
+                if (p != null) p.sendSystemMessage(Component.translatable("commands.teammod.accept.failed", teamName));
             }
             return false;
         }
         if (playerTeams.getOrDefault(player, Collections.emptySet()).size() >= MAX_TEAMS_PER_PLAYER) {
             MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-            if (server == null) return false;
-            ServerPlayer serverPlayer = server.getPlayerList().getPlayer(player);
-            if (serverPlayer != null) {
-                serverPlayer.sendSystemMessage(Component.translatable("commands.teammod.accept.failed", teamName));
+            if (server != null) {
+                ServerPlayer p = server.getPlayerList().getPlayer(player);
+                if (p != null) p.sendSystemMessage(Component.translatable("commands.teammod.accept.failed", teamName));
             }
             return false;
         }
@@ -238,77 +242,72 @@ public class TeamManager {
         team.addMember(player);
         playerTeams.computeIfAbsent(player, k -> new HashSet<>()).add(teamName);
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-        if (server == null) return false;
-        ServerPlayer serverPlayer = server.getPlayerList().getPlayer(player);
-        if (serverPlayer != null) {
-            serverPlayer.sendSystemMessage(Component.translatable("commands.teammod.accept.success", teamName));
+        if (server != null) {
+            ServerPlayer p = server.getPlayerList().getPlayer(player);
+            if (p != null) p.sendSystemMessage(Component.translatable("commands.teammod.accept.success", teamName));
         }
-        syncTeamToPlayers(teamName);
+        syncTeamToAll(teamName); // ← исправлено
         return true;
     }
 
+    // 5. declineInvitation — полностью исправлен
     public static boolean declineInvitation(String teamName, UUID player) {
         Team team = teams.get(teamName);
         if (team == null) {
             MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-            if (server == null) return false;
-            ServerPlayer serverPlayer = server.getPlayerList().getPlayer(player);
-            if (serverPlayer != null) {
-                serverPlayer.sendSystemMessage(Component.translatable("commands.teammod.decline.failed", teamName));
+            if (server != null) {
+                ServerPlayer p = server.getPlayerList().getPlayer(player);
+                if (p != null) p.sendSystemMessage(Component.translatable("commands.teammod.decline.failed", teamName));
             }
             return false;
         }
         if (team.cancelInvitation(player)) {
             MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-            if (server == null) return false;
-            ServerPlayer serverPlayer = server.getPlayerList().getPlayer(player);
-            if (serverPlayer != null) {
-                serverPlayer.sendSystemMessage(Component.translatable("commands.teammod.decline.success", teamName));
+            if (server != null) {
+                ServerPlayer p = server.getPlayerList().getPlayer(player);
+                if (p != null) p.sendSystemMessage(Component.translatable("commands.teammod.decline.success", teamName));
             }
-            syncTeamToPlayers(teamName);
+            syncTeamToAll(teamName); // ← исправлено
             return true;
         }
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-        if (server == null) return false;
-        ServerPlayer serverPlayer = server.getPlayerList().getPlayer(player);
-        if (serverPlayer != null) {
-            serverPlayer.sendSystemMessage(Component.translatable("commands.teammod.decline.failed", teamName));
+        if (server != null) {
+            ServerPlayer p = server.getPlayerList().getPlayer(player);
+            if (p != null) p.sendSystemMessage(Component.translatable("commands.teammod.decline.failed", teamName));
         }
         return false;
     }
 
+    // 6. leaveTeam — полностью исправлен
     public static boolean leaveTeam(String teamName, UUID player) {
         Team team = teams.get(teamName);
         if (team == null) {
             MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-            if (server == null) return false;
-            ServerPlayer serverPlayer = server.getPlayerList().getPlayer(player);
-            if (serverPlayer != null) {
-                serverPlayer.sendSystemMessage(Component.translatable("commands.teammod.leave.failed", teamName));
+            if (server != null) {
+                ServerPlayer p = server.getPlayerList().getPlayer(player);
+                if (p != null) p.sendSystemMessage(Component.translatable("commands.teammod.leave.failed", teamName));
             }
             return false;
         }
         if (team.getOwner().equals(player)) {
             MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-            if (server == null) return false;
-            ServerPlayer serverPlayer = server.getPlayerList().getPlayer(player);
-            if (serverPlayer != null) {
-                serverPlayer.sendSystemMessage(Component.translatable("commands.teammod.leave.failed", teamName));
+            if (server != null) {
+                ServerPlayer p = server.getPlayerList().getPlayer(player);
+                if (p != null) p.sendSystemMessage(Component.translatable("commands.teammod.leave.failed.owner", teamName));
             }
             return false;
         }
         team.removeMember(player);
-        playerTeams.get(player).remove(teamName);
+        playerTeams.getOrDefault(player, Collections.emptySet()).remove(teamName);
         if (team.getMembers().isEmpty()) {
             teams.remove(teamName);
         }
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-        if (server == null) return false;
-        ServerPlayer serverPlayer = server.getPlayerList().getPlayer(player);
-        if (serverPlayer != null) {
-            serverPlayer.sendSystemMessage(Component.translatable("commands.teammod.leave.success", teamName));
+        if (server != null) {
+            ServerPlayer p = server.getPlayerList().getPlayer(player);
+            if (p != null) p.sendSystemMessage(Component.translatable("commands.teammod.leave.success", teamName));
         }
-        syncTeamToPlayers(teamName);
+        syncTeamToAll(teamName); // ← исправлено
         return true;
     }
 
@@ -340,7 +339,7 @@ public class TeamManager {
         if (team.getMembers().isEmpty()) {
             teams.remove(teamName);
         }
-        syncTeamToPlayers(teamName);
+        syncTeamToAll(teamName);
         return true;
     }
 
@@ -368,7 +367,7 @@ public class TeamManager {
             if (currentOwnerPlayer != null) {
                 currentOwnerPlayer.sendSystemMessage(Component.translatable("commands.teammod.transfer.success", newOwnerPlayer != null ? newOwnerPlayer.getName() : "Player", teamName));
             }
-            syncTeamToPlayers(teamName);
+            syncTeamToAll(teamName);
             return true;
         }
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
@@ -398,7 +397,7 @@ public class TeamManager {
         if (serverOwner != null) {
             serverOwner.sendSystemMessage(Component.translatable("commands.teammod.friendlyfire." + (friendlyFire ? "enabled" : "disabled"), teamName));
         }
-        syncTeamToPlayers(teamName);
+        syncTeamToAll(teamName);
         return true;
     }
 
@@ -469,28 +468,6 @@ public class TeamManager {
         return clientTeams.get(teamName);
     }
 
-    private static void syncTeamToPlayers(String teamName) {
-        Team team = teams.get(teamName);
-        if (team != null) {
-            for (UUID member : team.getMembers()) {
-                MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-                if (server == null) continue;
-                ServerPlayer player = server.getPlayerList().getPlayer(member);
-                if (player != null) {
-                    NetworkHandler.INSTANCE.sendTo(new TeamSyncPacket(teamName), player.connection.connection, NetworkDirection.PLAY_TO_CLIENT);
-                }
-            }
-            for (UUID invited : team.getInvited()) {
-                MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-                if (server == null) continue;
-                ServerPlayer player = server.getPlayerList().getPlayer(invited);
-                if (player != null) {
-                    NetworkHandler.INSTANCE.sendTo(new TeamSyncPacket(teamName), player.connection.connection, NetworkDirection.PLAY_TO_CLIENT);
-                }
-            }
-        }
-    }
-
     @SubscribeEvent
     public static void onLivingAttack(LivingAttackEvent event) {
         LivingEntity attacker = event.getSource().getEntity() instanceof LivingEntity ? (LivingEntity) event.getSource().getEntity() : null;
@@ -508,5 +485,31 @@ public class TeamManager {
         clientPlayerTeams.remove(playerId);
         teams.entrySet().removeIf(entry -> entry.getValue().getMembers().isEmpty());
         clientTeams.entrySet().removeIf(entry -> entry.getValue().getMembers().isEmpty());
+    }
+
+    // 1. Универсальный метод — вставь его один раз в класс
+    private static void syncTeamToAll(String teamName) {
+        Team team = teams.get(teamName);
+        if (team == null) return;
+
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        if (server == null) return;
+
+        TeamSyncPacket packet = new TeamSyncPacket(teamName);
+
+        // Участники
+        for (UUID uuid : team.getMembers()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+            if (player != null) {
+                NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), packet);
+            }
+        }
+        // Приглашённые
+        for (UUID uuid : team.getInvited()) {
+            ServerPlayer player = server.getPlayerList().getPlayer(uuid);
+            if (player != null) {
+                NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), packet);
+            }
+        }
     }
 }
