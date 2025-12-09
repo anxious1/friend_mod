@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ImageButton;
@@ -674,5 +675,28 @@ public class OtherPlayerProfileScreen extends Screen {
     public void onClose() {
         ClientState.hidePlayerRender = false; // Сбрасываем флаг
         minecraft.setScreen(parentScreen);
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        int savedScroll = this.scrollOffset;
+        boolean savedDragging = this.isDraggingScroller;
+
+        // Сохраняем состояние кнопки приглашения (чтобы не потерять текстуру)
+        InviteButtonState savedButtonState = getInviteButtonState();
+
+        this.init(minecraft, width, height);
+
+        // Восстанавливаем
+        this.scrollOffset = savedScroll;
+        this.isDraggingScroller = savedDragging;
+
+        // Пересоздаём список команд текущего игрока
+        this.teamList.clear();
+        this.renderables.removeIf(w -> w instanceof TextureButton);
+        renderTeamList(null);
+
+        // Принудительно обновляем кнопку приглашения (она создаётся в init)
+        // Ничего делать не надо — init() сам её пересоздаст с правильными координатами
     }
 }

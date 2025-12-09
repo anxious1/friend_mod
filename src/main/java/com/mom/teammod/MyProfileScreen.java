@@ -1,7 +1,9 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ImageButton;
 import net.minecraft.client.gui.components.Tooltip;
@@ -568,6 +570,24 @@ public class MyProfileScreen extends Screen {
     public void onClose() {
         ClientState.hidePlayerRender = false; // ← ВАЖНО! Сбрасываем при выходе в инвентарь
         minecraft.setScreen(new InventoryScreen(minecraft.player));
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        int savedScroll = this.scrollOffset;
+        boolean savedDragging = this.isDraggingScroller;
+        long savedLastInput = this.lastInputTime.get();
+
+        this.init(minecraft, width, height);
+
+        this.scrollOffset = savedScroll;
+        this.isDraggingScroller = savedDragging;
+        this.lastInputTime.set(savedLastInput);
+
+        // Пересоздаём список команд
+        this.teamList.clear();
+        this.renderables.removeIf(w -> w instanceof TextureButton);
+        renderTeamList(null);
     }
 
     @Override

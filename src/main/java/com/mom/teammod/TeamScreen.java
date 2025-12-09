@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -404,9 +405,18 @@ public class TeamScreen extends Screen {
 
     public void refreshLists() {
         UUID playerUUID = minecraft.player.getUUID();
-        clientPlayerTeams.put(playerUUID, new HashSet<>(TeamManager.playerTeams.getOrDefault(playerUUID, Set.of())));
+
+        // Очищаем старое
+        clientPlayerTeams.clear();
         clientTeams.clear();
+
+        // Копируем актуальные данные с сервера
+        clientPlayerTeams.put(playerUUID, new HashSet<>(TeamManager.playerTeams.getOrDefault(playerUUID, Set.of())));
         clientTeams.putAll(TeamManager.teams);
+
+        // ПЕРЕСТРАИВАЕМ ЯЧЕЙКИ
+        this.clearWidgets(); // УДАЛЯЕМ ВСЁ!
+        this.init(); // ЗАНОВО СОЗДАЁМ ВСЁ (кнопки, ячейки, скролл и т.д.)
     }
 
     private <T extends AbstractWidget> T addRenderableOnly(T widget) {
@@ -587,5 +597,27 @@ public class TeamScreen extends Screen {
         } else {
             minecraft.setScreen(null);
         }
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        int savedScroll = this.scrollOffset;
+        boolean savedDragging = this.isDraggingScroller;
+
+        // Если есть поисковая строка в приглашениях или где-то ещё — добавишь потом
+        this.init(minecraft, width, height);
+
+        this.scrollOffset = savedScroll;
+        this.isDraggingScroller = savedDragging;
+
+        // Принудительно обновляем список приглашений (он у тебя в renderTeamList)
+        this.renderables.removeIf(w -> w instanceof TextureButton);
+        this.teamList.clear(); // чтобы заново собрался из актуальных данных
+        renderTeamList(null);
+    }
+
+    @Override
+    public void onClose() {
+        minecraft.setScreen(parentScreen);
     }
 }

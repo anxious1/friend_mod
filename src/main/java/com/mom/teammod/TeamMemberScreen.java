@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ImageButton;
@@ -538,6 +539,19 @@ public class TeamMemberScreen extends Screen {
                 }
             }
         }
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        int savedScroll = this.scrollOffset;
+        boolean savedDragging = this.isDraggingScroller;
+
+        this.init(minecraft, width, height);
+
+        this.scrollOffset = savedScroll;
+        this.isDraggingScroller = savedDragging;
+
+        updateVisibleButtons();
     }
 
     @Override

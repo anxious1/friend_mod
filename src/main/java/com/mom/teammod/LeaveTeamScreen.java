@@ -1,12 +1,15 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+
+import java.util.ArrayList;
 
 public class LeaveTeamScreen extends Screen {
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
@@ -97,44 +100,37 @@ public class LeaveTeamScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // 1. Рисуем TeamMemberScreen в замороженном состоянии
-        // Стало:
-        if (this.parentScreen != null && this.parentScreen instanceof TeamMemberScreen teamMember) {
-            // 1. Сначала фон TeamMemberScreen
-            RenderSystem.setShaderTexture(0, TeamMemberScreen.ATLAS);
-            int guiX = teamMember.left();
-            int guiY = teamMember.top();
-            g.blit(TeamMemberScreen.ATLAS, guiX, guiY, 0, 0,
-                    TeamMemberScreen.GUI_WIDTH, TeamMemberScreen.GUI_HEIGHT, 256, 256);
-
-            // 2. ТОЛЬКО элементы (текст, иконки), НЕ КНОПКИ
-            teamMember.renderElementsWithoutButtons(g);
+        // 1. Рисуем родительский экран как обычную картинку (без hover/tooltip)
+        if (this.parentScreen != null) {
+            this.parentScreen.render(g, Integer.MIN_VALUE, Integer.MIN_VALUE, partialTick);
         }
 
-        // 2. Дополнительное глубокое затемнение поверх
-        LeaveTeamScreen.this.renderBackground(g);
+        // 2. ВАЖНО: только ОДИН вызов — ванильное затемнение
+        //    именно оно даёт правильный полупрозрачный серый оверлей
+        this.renderBackground(g);
 
-        // 3. Рисуем окно подтверждения
+        // 3. Рисуем своё модальное окно поверх
         int x = left();
         int y = top();
         g.blit(ATLAS, x, y, FON_U, FON_V, FON_W, FON_H, 256, 256);
 
-        // 4. ТЕКСТ КОМАНДЫ В ОКНЕ ПОДТВЕРЖДЕНИЯ
-        String teamText = teamName;
-        if (teamTag != null && !teamTag.isEmpty()) {
-            teamText += "[" + teamTag + "]";
-        }
-
+        // Текст команды
+        String teamText = teamName + (teamTag != null && !teamTag.isEmpty() ? "[" + teamTag + "]" : "");
         if (font.width(teamText) > TEAM_NAME_W) {
             teamText = font.plainSubstrByWidth(teamText, TEAM_NAME_W - 6) + "..";
         }
-
         int textX = x + TEAM_NAME_U + (TEAM_NAME_W - font.width(teamText)) / 2;
         int textY = y + TEAM_NAME_V + (TEAM_NAME_H - 8) / 2;
         g.drawString(font, teamText, textX, textY, 0xFFFFFF, false);
 
-        // 5. КНОПКИ LeaveTeamScreen
+        // 4. Рисуем ТОЛЬКО свои кнопки
         super.render(g, mouseX, mouseY, partialTick);
+    }
+
+    @Override
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        // Это нужно, чтобы клики не проходили только на наше окно
+        return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
@@ -149,5 +145,15 @@ public class LeaveTeamScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        // Сохраняем только то, что может быть (ввода там нет, но на всякий)
+        this.init(minecraft, width, height);
+
+        // Ничего больше сохранять не нужно — всё пересоздаётся в init()
+        // Главное: родительский экран (TeamMemberScreen) уже пересчитался,
+        // и теперь мы нарисуем своё окно точно по центру нового разрешения
     }
 }

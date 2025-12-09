@@ -1,5 +1,6 @@
 package com.mom.teammod;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -20,7 +21,7 @@ public class LogoPickerScreen extends Screen {
     private static final int CONFIRM_Y = 106 - 43 + 12;
     private static final int CONFIRM_W = 46;
     private static final int CONFIRM_H = 12;
-
+    private final Screen parentScreen;
     // ПОЛЗУНОК — точно как в ColorPickerScreen
     private static final int SCROLLER_X = 11 + 1;
     private static final int SCROLLER_BASE_Y = 24;
@@ -36,6 +37,7 @@ public class LogoPickerScreen extends Screen {
 
     public LogoPickerScreen() {
         super(Component.literal(""));
+        this.parentScreen = Minecraft.getInstance().screen;
     }
 
     @Override
@@ -66,14 +68,21 @@ public class LogoPickerScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        renderBackground(g); // ← ванильный фон уже с затемнением
-        // или вручную:
-        // g.fill(0, 0, width, height, 0xB3000000);
+        // 1. Замораживаем родительский экран (он больше не реагирует на ховер/клики)
+        if (this.parentScreen != null) {
+            this.parentScreen.render(g, Integer.MIN_VALUE, Integer.MIN_VALUE, partialTick);
+        }
 
+        // 2. Правильное ванильное затемнение (самое красивое и корректное)
+        this.renderBackground(g);
+
+        // 3. Рисуем свой пикер (фон + скроллер + кнопки)
         int x = (width - GUI_WIDTH) / 2;
         int y = (height - GUI_HEIGHT) / 2;
         g.blit(ATLAS, x, y, 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
         renderScroller(g, x, y);
+
+        // 4. Рисуем виджеты (кнопки "Готово"/"Отмена")
         super.render(g, mouseX, mouseY, partialTick);
     }
 
@@ -147,7 +156,8 @@ public class LogoPickerScreen extends Screen {
 
     @Override
     public void onClose() {
-        super.onClose();
+        // Возвращаемся строго на тот экран, с которого открыли пикер
+        minecraft.setScreen(parentScreen);
     }
 
     @Override
@@ -167,5 +177,19 @@ public class LogoPickerScreen extends Screen {
         };
         btn.setTooltip(Tooltip.create(tooltip));
         this.addRenderableWidget(btn);
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        // Сохраняем состояние скролла и перетаскивания
+        int savedScroll = this.scrollOffset;
+        boolean savedDragging = this.isDraggingScroller;
+
+        // Пересоздаём экран с новыми размерами
+        this.init(minecraft, width, height);
+
+        // Восстанавливаем состояние
+        this.scrollOffset = savedScroll;
+        this.isDraggingScroller = savedDragging;
     }
 }

@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -137,40 +138,29 @@ public class DeleteTeamScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // 1. Рисуем CustomizationScreen в замороженном состоянии (ТОЛЬКО фон)
-        if (this.parentScreen != null && this.parentScreen instanceof CustomizationScreen customization) {
-            // Рисуем только фон CustomizationScreen, БЕЗ текста
-            RenderSystem.setShaderTexture(0, CustomizationScreen.ATLAS);
-            int customX = (width - CustomizationScreen.GUI_WIDTH) / 2;
-            int customY = (height - CustomizationScreen.GUI_HEIGHT) / 2;
-            g.blit(CustomizationScreen.ATLAS, customX, customY, 0, 0,
-                    CustomizationScreen.GUI_WIDTH, CustomizationScreen.GUI_HEIGHT, 256, 256);
-            // Текст команды НЕ рисуем!
+        // 1. Замораживаем родителя как картинку (без hover/tooltip/клик)
+        if (this.parentScreen != null) {
+            this.parentScreen.render(g, Integer.MIN_VALUE, Integer.MIN_VALUE, partialTick);
         }
 
-        // 2. Глубокое затемнение поверх
-        DeleteTeamScreen.this.renderBackground(g);
+        // 2. Ванильное затемнение — идеальный серый оверлей
+        this.renderBackground(g);
 
-        // 3. Рисуем окно подтверждения удаления
+        // 3. Рисуем своё окно удаления
         int x = left();
         int y = top();
         g.blit(ATLAS, x, y, FON_U, FON_V, FON_W, FON_H, 256, 256);
 
-        // 4. ТЕКСТ КОМАНДЫ В ОКНЕ ПОДТВЕРЖДЕНИЯ (для сравнения)
-        String teamText = teamName;
-        if (teamTag != null && !teamTag.isEmpty()) {
-            teamText += "[" + teamTag + "]";
-        }
-
+        // 4. Текст команды для подтверждения
+        String teamText = teamName + (teamTag != null && !teamTag.isEmpty() ? "[" + teamTag + "]" : "");
         if (font.width(teamText) > NAME_W) {
             teamText = font.plainSubstrByWidth(teamText, NAME_W - 6) + "..";
         }
-
         int textX = x + NAME_U + (NAME_W - font.width(teamText)) / 2;
         int textY = y + NAME_V + (NAME_H - 8) / 2;
         g.drawString(font, teamText, textX, textY, 0xFFFFFF, false);
 
-        // 5. КНОПКИ и поле ввода
+        // 5. Рисуем только свои кнопки и поле ввода
         super.render(g, mouseX, mouseY, partialTick);
     }
 
@@ -186,5 +176,17 @@ public class DeleteTeamScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        String savedInput = this.inputField != null ? this.inputField.getValue() : "";
+
+        this.init(minecraft, width, height);
+
+        if (this.inputField != null) {
+            this.inputField.setValue(savedInput);
+        }
+        updateConfirmButton(); // если у тебя есть такой метод
     }
 }

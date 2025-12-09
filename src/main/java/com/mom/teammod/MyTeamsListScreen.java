@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -276,5 +277,20 @@ public class MyTeamsListScreen extends Screen {
             int textColor = 0xFFFFFF;
             g.drawString(font, displayText, this.getX() + 10, this.getY() + 8, textColor, false);
         }
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        int savedScroll = this.scrollOffset;
+        Set<String> savedClicked = new HashSet<>(this.clickedTeams); // сохраняем выбор
+
+        this.init(minecraft, width, height);
+
+        this.scrollOffset = savedScroll;
+        this.clickedTeams.clear();
+        this.clickedTeams.addAll(savedClicked);
+
+        // Пересоздаём кнопки команд с новым выбором
+        createTeamButtons();
     }
 }

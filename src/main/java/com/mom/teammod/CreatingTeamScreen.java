@@ -2,6 +2,7 @@ package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mom.teammod.packets.CreateTeamPacket;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -331,5 +332,19 @@ public class CreatingTeamScreen extends Screen {
         nameBox.mouseClicked(mx, my, b);
         tagBox.mouseClicked(mx, my, b);
         return super.mouseClicked(mx, my, b);
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        String savedName = this.nameBox != null ? this.nameBox.getValue() : "";
+        String savedTag  = this.tagBox  != null ? this.tagBox.getValue()  : "";
+
+        this.init(minecraft, width, height);
+
+        // Восстанавливаем текст в полях ввода
+        if (this.nameBox != null) this.nameBox.setValue(savedName);
+        if (this.tagBox  != null) this.tagBox.setValue(savedTag);
+
+        updateAll(); // обновляем кнопку "Готово"
     }
 }

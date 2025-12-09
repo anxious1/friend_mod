@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -351,5 +352,24 @@ public class TeamsListScreen extends Screen {
             this.team = team;
             this.isMember = isMember;
         }
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        int savedScroll = this.scrollOffset;
+        boolean savedDragging = this.isDraggingScrollbar;
+        String savedSearch = this.searchBox != null ? this.searchBox.getValue() : "";
+
+        this.init(minecraft, width, height);
+
+        this.scrollOffset = savedScroll;
+        this.isDraggingScrollbar = savedDragging;
+
+        if (this.searchBox != null) {
+            this.searchBox.setValue(savedSearch);
+        }
+
+        // Фильтр и слоты пересчитываются автоматически в applySearchFilter()
+        applySearchFilter();
     }
 }

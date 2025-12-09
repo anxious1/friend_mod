@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -512,4 +513,23 @@ public class PlayersListScreen extends Screen {
 
     @Override
     public boolean isPauseScreen() { return false; }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        int savedScroll = this.scrollOffset;
+        boolean savedDragging = this.isDraggingScrollbar;
+        String savedSearch = this.searchBox != null ? this.searchBox.getValue() : "";
+
+        this.init(minecraft, width, height);
+
+        this.scrollOffset = savedScroll;
+        this.isDraggingScrollbar = savedDragging;
+
+        if (this.searchBox != null) {
+            this.searchBox.setValue(savedSearch);
+        }
+
+        // Принудительно обновляем список после изменения размера
+        applySearchFilter();
+    }
 }

@@ -3,6 +3,7 @@ package com.mom.teammod;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mom.teammod.packets.DeleteTeamPacket;
 import com.mom.teammod.packets.TeamSyncPacket;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -347,5 +348,12 @@ public class CustomizationScreen extends Screen {
         }
 
         super.render(g, mouseX, mouseY, partialTick);
+    }
+
+    @Override
+    public void resize(Minecraft minecraft, int width, int height) {
+        this.init(minecraft, width, height);
+        // Ничего сохранять не нужно — всё пересоздаётся в init()
+        // Кнопки, тогглы и превьюшки — всё привязано к новым координатам
     }
 }
