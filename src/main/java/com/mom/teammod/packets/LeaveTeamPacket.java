@@ -2,7 +2,10 @@ package com.mom.teammod.packets;
 
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.TeamManager;
+import com.mom.teammod.TeamScreen;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.PacketDistributor;
@@ -30,29 +33,17 @@ public class LeaveTeamPacket {
             UUID leaverUUID = ctx.get().getSender().getUUID();
 
             if (TeamManager.leaveTeam(pkt.teamName, leaverUUID)) {
-                TeamManager.Team team = TeamManager.getServerTeam(pkt.teamName);
-                if (team != null) {
-                    TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName);
-
-                    // Отправляем ВСЕМ оставшимся участникам
-                    for (UUID memberUUID : team.getMembers()) {
-                        ServerPlayer player = ctx.get().getSender().getServer()
-                                .getPlayerList().getPlayer(memberUUID);
-                        if (player != null) {
-                            NetworkHandler.INSTANCE.send(
-                                    PacketDistributor.PLAYER.with(() -> player),
-                                    syncPacket
-                            );
-                        }
-                    }
-
-                    // И обязательно — САМОМУ вышедшему (это критично!)
-                    ServerPlayer leaver = ctx.get().getSender();
-                    NetworkHandler.INSTANCE.send(
-                            PacketDistributor.PLAYER.with(() -> leaver),
-                            syncPacket
+                // Отправляем обновление ВСЕМ (включая вышедшего)
+                TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName);
+                MinecraftServer server = ctx.get().getSender().getServer();
+                if (server != null) {
+                    server.getPlayerList().getPlayers().forEach(p ->
+                            NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> p), syncPacket)
                     );
                 }
+
+                // ВАЖНО: НИЧЕГОСЯ НЕ ВЫЗЫВАЕМ returnToTeamScreen() ЗДЕСЬ!
+                // Клиент сам закроет профиль и обновит список через TeamSyncPacket
             }
         });
         ctx.get().setPacketHandled(true);

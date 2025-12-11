@@ -1,8 +1,12 @@
+// DeleteTeamPacket.java
 package com.mom.teammod.packets;
 
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.TeamManager;
+import com.mom.teammod.TeamScreen;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.PacketDistributor;
@@ -26,32 +30,21 @@ public class DeleteTeamPacket {
 
     public static void handle(DeleteTeamPacket pkt, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
-            TeamManager.Team team = TeamManager.getTeam(pkt.teamName);
-            if (team == null || !team.getOwner().equals(ctx.get().getSender().getUUID())) {
-                return;
-            }
+            ServerPlayer player = ctx.get().getSender();
 
-            // Удаляем команду и чистим у игроков
-            TeamManager.teams.remove(pkt.teamName);
-            team.getMembers().forEach(member -> {
-                TeamManager.playerTeams
-                        .getOrDefault(member, java.util.Collections.emptySet())
-                        .remove(pkt.teamName);
-            });
-
-            // Отправляем пакет всем участникам (и бывшим участникам) — клиентам
-            TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName); // пакет с именем команды → клиент просто удалит её
-
-            team.getMembers().forEach(memberUUID -> {
-                ServerPlayer player = ctx.get().getSender().getServer()
-                        .getPlayerList().getPlayer(memberUUID);
-                if (player != null) {
-                    NetworkHandler.INSTANCE.send(
-                            PacketDistributor.PLAYER.with(() -> player),
-                            syncPacket
+            if (TeamManager.deleteTeam(pkt.teamName, player.getUUID())) {
+                // Отправляем ВСЕМ игрокам
+                TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName);
+                MinecraftServer server = player.getServer();
+                if (server != null) {
+                    server.getPlayerList().getPlayers().forEach(p ->
+                            NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> p), syncPacket)
                     );
                 }
-            });
+
+                // Возвращаем лидера в TeamScreen
+                Minecraft.getInstance().execute(() -> TeamScreen.returnToTeamScreen());
+            }
         });
         ctx.get().setPacketHandled(true);
     }

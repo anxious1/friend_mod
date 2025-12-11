@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mom.teammod.packets.LeaveTeamPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -84,17 +85,15 @@ public class LeaveTeamScreen extends Screen {
         });
     }
 
+
+    private void onConfirm() {
+        NetworkHandler.INSTANCE.sendToServer(new LeaveTeamPacket(teamName));
+        TeamScreen.returnToTeamScreen();
+    }
+
     private void onCancel() {
         minecraft.setScreen(parentScreen);
     }
-
-    private void onConfirm() {
-        System.out.println("Выход из команды подтвержден: " + teamName);
-        // TODO: Отправить пакет на сервер для выхода из команды
-        // NetworkHandler.INSTANCE.sendToServer(new LeaveTeamPacket(teamName));
-        minecraft.setScreen(null); // Закрываем все экраны
-    }
-
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
         // 1. Рисуем TeamMemberScreen в замороженном состоянии

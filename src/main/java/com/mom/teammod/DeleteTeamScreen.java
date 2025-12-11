@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mom.teammod.packets.DeleteTeamPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -128,10 +129,8 @@ public class DeleteTeamScreen extends Screen {
 
     private void onConfirm() {
         if (isInputValid()) {
-            System.out.println("Удаление команды подтверждено: " + teamName);
-            // TODO: Отправить пакет на сервер для удаления команды
-            // NetworkHandler.INSTANCE.sendToServer(new DeleteTeamPacket(teamName));
-            minecraft.setScreen(null);
+            NetworkHandler.INSTANCE.sendToServer(new DeleteTeamPacket(teamName));
+            minecraft.setScreen(parentScreen); // возвращаемся в TeamScreen
         }
     }
 

@@ -2,6 +2,7 @@ package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mom.teammod.packets.CreateTeamPacket;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.EditBox;
@@ -280,7 +281,21 @@ public class CreatingTeamScreen extends Screen {
                 showCompass
         ));
 
-        minecraft.setScreen(parent);
+        // ← ВОТ ЭТО — КЛЮЧЕВАЯ СТРОКА!
+        // Сразу открываем профиль новой команды
+        Minecraft.getInstance().execute(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            mc.setScreen(new TeamProfileOwner(
+                    null,
+                    mc.player.getInventory(),
+                    Component.literal(teamName),
+                    teamName,
+                    tag,
+                    true, // ты — владелец
+                    showTag,
+                    friendlyFire
+            ));
+        });
     }
 
     @Override

@@ -2,7 +2,10 @@ package com.mom.teammod.packets;
 
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.TeamManager;
+import com.mom.teammod.TeamScreen;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.PacketDistributor;
@@ -33,31 +36,18 @@ public class KickPlayerPacket {
             UUID kickerUUID = ctx.get().getSender().getUUID();
 
             if (TeamManager.kickPlayer(pkt.teamName, pkt.playerUUID, kickerUUID)) {
-                TeamManager.Team team = TeamManager.getServerTeam(pkt.teamName);
-                if (team != null) {
-                    TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName);
+                // Отправляем ВСЕМ (включая выгнанного)
+                TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName);
+                MinecraftServer server = ctx.get().getSender().getServer();
+                if (server != null) {
+                    server.getPlayerList().getPlayers().forEach(p ->
+                            NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> p), syncPacket)
+                    );
+                }
 
-                    // Отправляем всем оставшимся участникам + выгнанному (чтобы он увидел удаление команды из списка)
-                    for (UUID memberUUID : team.getMembers()) {
-                        ServerPlayer player = ctx.get().getSender().getServer()
-                                .getPlayerList().getPlayer(memberUUID);
-                        if (player != null) {
-                            NetworkHandler.INSTANCE.send(
-                                    PacketDistributor.PLAYER.with(() -> player),
-                                    syncPacket
-                            );
-                        }
-                    }
-
-                    // Также отправляем выгнанному игроку (он уже не в members, но должен получить обновление)
-                    ServerPlayer kickedPlayer = ctx.get().getSender().getServer()
-                            .getPlayerList().getPlayer(pkt.playerUUID);
-                    if (kickedPlayer != null) {
-                        NetworkHandler.INSTANCE.send(
-                                PacketDistributor.PLAYER.with(() -> kickedPlayer),
-                                syncPacket
-                        );
-                    }
+                // Если это ТЫ был выгнан — кидаем в TeamScreen
+                if (pkt.playerUUID.equals(Minecraft.getInstance().player.getUUID())) {
+                    Minecraft.getInstance().execute(() -> TeamScreen.returnToTeamScreen());
                 }
             }
         });

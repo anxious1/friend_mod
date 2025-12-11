@@ -7,9 +7,14 @@ import net.minecraft.client.gui.components.ImageButton;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.server.ServerAboutToStartEvent;
+import net.minecraftforge.event.server.ServerStartedEvent;
+import net.minecraftforge.event.server.ServerStartingEvent;
 import net.minecraftforge.eventbus.api.IEventBus;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -36,14 +41,21 @@ public class TeamMod {
         TeamRecipes.SERIALIZERS.register(modEventBus);
         TeamMenu.MENUS.register(modEventBus);
         MinecraftForge.EVENT_BUS.register(new BossKillHandler());
-
+        MinecraftForge.EVENT_BUS.register(TeamMod.class);
         NetworkHandler.register();
-
+        MinecraftForge.EVENT_BUS.register(TeamManager.class);
         MinecraftForge.EVENT_BUS.register(this);
     }
 
     private void commonSetup(final FMLCommonSetupEvent event) {
         LOGGER.info("TeamMod: Common setup started - Recipes registered!");
+    }
+
+    @SubscribeEvent
+    public static void onServerStarted(ServerStartedEvent event) {
+        // Это событие срабатывает ПОСЛЕ полной загрузки мира
+        // overworld() уже существует, всё безопасно
+        TeamWorldData.get(event.getServer().overworld());
     }
 
     @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.MOD)

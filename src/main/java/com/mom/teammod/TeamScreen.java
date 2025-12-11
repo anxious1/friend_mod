@@ -1,11 +1,13 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ImageButton;
 import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.narration.NarrationElementOutput;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
@@ -113,7 +115,7 @@ public class TeamScreen extends Screen {
         // КНОПКА ИНВЕНТАРЬ
         this.addRenderableWidget(new Button(guiX + 2, baseY, 26, 27, Component.empty(), btn -> {
             minecraft.setScreen(new InventoryScreen(minecraft.player));
-        }, supplier -> supplier.get()) {  // ← ЭТО РАБОТАЕТ В 1.20.1!
+        }, supplier -> supplier.get()) {
             private boolean isPressed = false;
 
             @Override
@@ -143,13 +145,11 @@ public class TeamScreen extends Screen {
             }
         });
 
-        // КНОПКА КОМАНДЫ — ЗАЖАТА
+        // КНОПКА КОМАНДЫ — ЗАЖАТА (мы уже на ней)
         int teamX = guiX + 2 + 26 + 52;
-        this.addRenderableWidget(new Button(teamX, baseY - 2, 26, 29, Component.empty(), btn -> {
-            // Уже здесь — ничего не делаем
-        }, supplier -> supplier.get()) {
+        this.addRenderableWidget(new Button(teamX, baseY - 2, 26, 29, Component.empty(), btn -> {}, supplier -> supplier.get()) {
             @Override
-            public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+            public void render(GuiGraphics g, int mx, int my, float pt) {
                 g.blit(press, getX(), getY(), 0, 0, 26, 29, 26, 29);
                 g.blit(TEAM_LIST_ICON, getX() + 5, getY() + 6, 0, 0, 16, 16, 16, 16);
 
@@ -167,7 +167,7 @@ public class TeamScreen extends Screen {
             private boolean isPressed = false;
 
             @Override
-            public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+            public void render(GuiGraphics g, int mx, int my, float pt) {
                 boolean active = this.isHovered() || isPressed;
                 ResourceLocation tex = active ? press : unpress;
                 int h = active ? 29 : 27;
@@ -193,58 +193,9 @@ public class TeamScreen extends Screen {
             }
         });
 
-        // ТВОЙ СТАРЫЙ КОД — НЕ ТРОГАЙ!
-        UUID playerId = minecraft.player.getUUID();
-        Set<String> playerTeams = clientPlayerTeams.getOrDefault(playerId, Set.of());
-        List<String> playerTeamList = new ArrayList<>(playerTeams);
+        // === ВСЁ, ЧТО НИЖЕ — НОВОЕ И ПРАВИЛЬНОЕ ===
 
-        int[] yPositions = {36, 73, 110};
-
-        for (int slot = 0; slot < 3; slot++) {
-            int y = yPositions[slot];
-
-            if (slot < playerTeamList.size()) {
-                String teamName = playerTeamList.get(slot);
-                TeamManager.Team team = TeamManager.getTeam(teamName);
-
-                int plashkaX = guiX + 10 - 1;
-                int plashkaY = guiY + y - 5 - 5 - 1;
-
-                addRenderableOnly(new AbstractWidget(plashkaX, plashkaY, PLASHKA_W, PLASHKA_H, Component.empty()) {
-                    @Override
-                    public void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-                        RenderSystem.setShaderTexture(0, ATLAS);
-                        g.blit(ATLAS, getX(), getY(), PLASHKA_U, PLASHKA_V, PLASHKA_W, PLASHKA_H, 256, 256);
-                        g.blit(ATLAS, getX() + PLASHKA_W - ZVEZDA_W - 4, getY() + 4,
-                                ZVEZDA_U, ZVEZDA_V, ZVEZDA_W, ZVEZDA_H, 256, 256);
-
-                        String display = teamName + (team != null && !team.getTag().isEmpty() ? "[" + team.getTag() + "]" : "");
-                        int textX = getX() + PLASHKA_W / 2 - font.width(display) / 2;
-                        int textY = getY() + (PLASHKA_H - 9) / 2;
-                        g.drawString(font, display, textX, textY, 0xFFFFFF, false);
-                    }
-
-                    @Override public boolean isMouseOver(double mouseX, double mouseY) { return false; }
-                    @Override protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {}
-                });
-
-                addAtlasButton(guiX + 108 + 5, guiY + y, PROFILE_BTN_W, PROFILE_BTN_H,
-                        PROFILE_BTN_U, PROFILE_BTN_V,
-                        () -> openTeamProfile(teamName), Component.literal("Профиль"));
-
-                addAtlasButton(guiX + 158 + 3, guiY + y, LEAVE_BTN_W, LEAVE_BTN_H,
-                        LEAVE_BTN_U, LEAVE_BTN_V,
-                        () -> openLeaveTeam(teamName, team),
-                        Component.literal("Покинуть"));
-            } else {
-                addTransparentButton(guiX + 17, guiY + y, 28, 13,
-                        this::openJoinList, Component.literal("Присоединиться"));
-
-                addTransparentButton(guiX + 58, guiY + y, 43, 13,
-                        this::openCreateTeam, Component.literal("Создать команду"));
-            }
-        }
-
+        // Пимп-кнопки (компас и тег)
         final boolean[] compassEnabled = {false};
         addPimpButton(guiX + 44, guiY + 147, 14, 14, 16, 138, 15, 14,
                 COMPASS_U, COMPASS_V, COMPASS_W, COMPASS_H,
@@ -255,7 +206,9 @@ public class TeamScreen extends Screen {
                 TAG_U, TAG_V, TAG_W, TAG_H,
                 "Вкл. / Выкл. отображение тега выбранной команды.", tagEnabled);
 
-        renderTeamList(null);
+        // ← ВСЁ! Теперь слоты команд и приглашения рисуем в одном месте
+        rebuildTeamSlots();      // ← левые 3 слота (твои команды)
+        renderTeamList(null);    // ← правый список приглашений
     }
 
     private void openLeaveTeam(String teamName, TeamManager.Team team) {
@@ -401,20 +354,21 @@ public class TeamScreen extends Screen {
         g.blit(BACKGROUND, x, y, 0, 0, GUI_WIDTH, GUI_HEIGHT, GUI_WIDTH, GUI_HEIGHT);
     }
 
+    private void rebuildTeamSlots() {
+        // Удаляем старые плашки и кнопки команд
+        this.children().removeIf(w -> {
+            if (w instanceof Button b) {
+                String msg = b.getMessage().getString();
+                return msg.isEmpty() || msg.contains("Профиль") || msg.contains("Покинуть");
+            }
+            return w instanceof AbstractWidget aw && aw.getClass() == AbstractWidget.class;
+        });
+        this.renderables.removeIf(w -> w instanceof AbstractWidget);
 
-    public void refreshLists() {
-        // НИЧЕГО НЕ ОЧИЩАЕМ! Мы работаем с теми же мапами, что и TeamSyncPacket
-
-        // Просто удаляем старые ячейки и кнопки
-        this.children().removeIf(widget ->
-                widget instanceof AbstractWidget && !(widget instanceof Button && ((Button)widget).getMessage().getString().contains("Инвентарь"))
-        );
-        this.renderables.removeIf(widget -> widget instanceof AbstractWidget);
-
-        // Заново создаём ТОЛЬКО ячейки команд (левые 3 слота)
         UUID playerId = minecraft.player.getUUID();
-        Set<String> playerTeamsSet = TeamManager.clientPlayerTeams.getOrDefault(playerId, Set.of());
-        List<String> playerTeamList = new ArrayList<>(playerTeamsSet);
+        Set<String> myTeamNames = clientPlayerTeams.getOrDefault(playerId, Set.of());
+        List<String> myTeams = new ArrayList<>(myTeamNames);
+        myTeams.sort(String::compareToIgnoreCase);
 
         int guiX = (width - 256) / 2;
         int guiY = (height - 170) / 2;
@@ -423,9 +377,9 @@ public class TeamScreen extends Screen {
         for (int slot = 0; slot < 3; slot++) {
             int y = yPositions[slot];
 
-            if (slot < playerTeamList.size()) {
-                String teamName = playerTeamList.get(slot);
-                TeamManager.Team team = TeamManager.clientTeams.get(teamName);
+            if (slot < myTeams.size()) {
+                String teamName = myTeams.get(slot);
+                TeamManager.Team team = clientTeams.get(teamName);
 
                 int plashkaX = guiX + 10 - 1;
                 int plashkaY = guiY + y - 5 - 5 - 1;
@@ -439,17 +393,20 @@ public class TeamScreen extends Screen {
                         g.blit(ATLAS, getX() + PLASHKA_W - ZVEZDA_W - 4, getY() + 4,
                                 ZVEZDA_U, ZVEZDA_V, ZVEZDA_W, ZVEZDA_H, 256, 256);
 
-                        String display = teamName + (team != null && !team.getTag().isEmpty() ? "[" + team.getTag() + "]" : "");
+                        String tag = team != null ? team.getTag() : "";
+                        String display = teamName + (!tag.isEmpty() ? "[" + tag + "]" : "");
                         int textX = getX() + PLASHKA_W / 2 - font.width(display) / 2;
                         int textY = getY() + (PLASHKA_H - 9) / 2;
                         g.drawString(font, display, textX, textY, 0xFFFFFF, false);
                     }
 
-                    @Override public boolean isMouseOver(double mouseX, double mouseY) { return false; }
-                    @Override protected void updateWidgetNarration(net.minecraft.client.gui.narration.NarrationElementOutput output) {}
+                    @Override public boolean isMouseOver(double mx, double my) { return false; }
+
+                    @Override
+                    protected void updateWidgetNarration(NarrationElementOutput output) { }
                 });
 
-                // Кнопки "Профиль" и "Покинуть"
+                // Кнопки
                 addAtlasButton(guiX + 108 + 5, guiY + y, PROFILE_BTN_W, PROFILE_BTN_H,
                         PROFILE_BTN_U, PROFILE_BTN_V,
                         () -> openTeamProfile(teamName), Component.literal("Профиль"));
@@ -459,23 +416,36 @@ public class TeamScreen extends Screen {
                         () -> openLeaveTeam(teamName, team),
                         Component.literal("Покинуть"));
             } else {
-                // Пустые слоты — кнопки "Присоединиться" и "Создать"
                 addTransparentButton(guiX + 17, guiY + y, 28, 13,
                         this::openJoinList, Component.literal("Присоединиться"));
-
                 addTransparentButton(guiX + 58, guiY + y, 43, 13,
                         this::openCreateTeam, Component.literal("Создать команду"));
             }
         }
+    }
 
-        // Обновляем правый список приглашений
-        teamList.clear();
-        for (TeamManager.Team team : TeamManager.clientTeams.values()) {
-            if (!playerTeamsSet.contains(team.getName())) {
-                teamList.add(team);
+    public void refreshLists() {
+        System.out.println("[TeamScreen] refreshLists() вызван!");
+        System.out.println("  clientPlayerTeams: " + clientPlayerTeams.getOrDefault(minecraft.player.getUUID(), Set.of()));
+        System.out.println("  clientTeams: " + clientTeams.keySet());
+        // Принудительно ждём один тик, чтобы данные точно обновились
+        Minecraft.getInstance().execute(() -> {
+            rebuildTeamSlots();
+
+            teamList.clear();
+            UUID myId = minecraft.player.getUUID();
+            Set<String> myTeamNames = clientPlayerTeams.getOrDefault(myId, Set.of());
+
+            for (TeamManager.Team team : clientTeams.values()) {
+                if (!myTeamNames.contains(team.getName())) {
+                    teamList.add(team);
+                }
             }
-        }
-        teamList.sort(Comparator.comparing(TeamManager.Team::getName));
+            teamList.sort(Comparator.comparing(TeamManager.Team::getName));
+
+            this.renderables.removeIf(w -> w instanceof TextureButton);
+            renderTeamList(null);
+        });
     }
 
     private void renderTeamList(GuiGraphics g) {
@@ -651,5 +621,20 @@ public class TeamScreen extends Screen {
         } else {
             minecraft.setScreen(null);
         }
+    }
+
+    // В самом низу класса TeamScreen.java (вне любых методов)
+    public static void returnToTeamScreen() {
+        Minecraft.getInstance().execute(() -> {
+            Minecraft mc = Minecraft.getInstance();
+            if (mc.player != null && mc.level != null) {
+                mc.setScreen(new TeamScreen(
+                        null,
+                        null,
+                        mc.player.getInventory(),
+                        Component.translatable("gui.teammod.team_tab")
+                ));
+            }
+        });
     }
 }

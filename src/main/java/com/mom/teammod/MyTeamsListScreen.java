@@ -15,48 +15,19 @@ public class MyTeamsListScreen extends Screen {
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
             "textures/gui/my_teams_list.png");
 
-    // Исправить UV-координаты согласно разметке XML
     private static final int PLASHKA_BASIC_U = 0,   PLASHKA_BASIC_V = 207,  PLASHKA_BASIC_W = 168, PLASHKA_BASIC_H = 24;
-    private static final int PLASHKA_HOVER_U = 1,   PLASHKA_HOVER_V = 232,  PLASHKA_HOVER_W = 168, PLASHKA_HOVER_H = 24; // ← изменить на 24
+    private static final int PLASHKA_HOVER_U = 1,   PLASHKA_HOVER_V = 232,  PLASHKA_HOVER_W = 168, PLASHKA_HOVER_H = 24;
     private static final int PLASHKA_CLICKED_U = 0, PLASHKA_CLICKED_V = 183, PLASHKA_CLICKED_W = 169, PLASHKA_CLICKED_H = 24;
 
-    // Кнопка подтверждения
     private static final int CONFIRM_U = 0, CONFIRM_V = 147, CONFIRM_W = 47, CONFIRM_H = 14;
 
     private static final int GUI_WIDTH = 256;
     private static final int GUI_HEIGHT = 147;
-    private static final int VISIBLE_SLOTS = 4;
+    private static final int VISIBLE_SLOTS = 4; // видно одновременно 4 команды (по текстуре)
     private static final int SLOT_HEIGHT = 30;
 
-    private static class TestTeam {
-        final String name;
-        final String tag;
-
-        TestTeam(String name, String tag) {
-            this.name = name;
-            this.tag = tag;
-        }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) return true;
-            if (obj == null || getClass() != obj.getClass()) return false;
-            TestTeam testTeam = (TestTeam) obj;
-            return Objects.equals(name, testTeam.name);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(name);
-        }
-    }
-
-    private final List<TestTeam> teamList = Arrays.asList(
-            new TestTeam("Охотники за головами", "ОГ"),
-            new TestTeam("Строители мира", "СМ"),
-            new TestTeam("Ночные рейдеры", "НР")
-    );
-
+    // Реальные команды игрока
+    private List<TeamManager.Team> myTeams = new ArrayList<>();
     private final Set<String> clickedTeams = new HashSet<>();
     private int scrollOffset = 0;
 
@@ -74,14 +45,14 @@ public class MyTeamsListScreen extends Screen {
     @Override
     protected void init() {
         super.init();
+        scrollOffset = 0;
 
         int x = left();
         int y = top();
 
-        // Кнопка "Назад"
         addTransparentButton(
                 x + 10 + 22,
-                y + GUI_HEIGHT - 20 - 9, // ← поднять на 20 пикселей
+                y + GUI_HEIGHT - 20 - 9,
                 30, 12,
                 () -> minecraft.setScreen(parentScreen),
                 Component.literal("Назад")
@@ -97,22 +68,33 @@ public class MyTeamsListScreen extends Screen {
         ) {
             @Override
             public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                // Рисуем текстуру только если выбрана хотя бы одна команда
                 if (!clickedTeams.isEmpty()) {
                     g.blit(ATLAS, this.getX(), this.getY(), CONFIRM_U, CONFIRM_V, CONFIRM_W, CONFIRM_H, 256, 256);
                 }
-
-                // Подсветка при наведении (только если есть текстурка)
                 if (this.isHovered() && !clickedTeams.isEmpty()) {
                     g.fill(this.getX(), this.getY(), this.getX() + CONFIRM_W, this.getY() + CONFIRM_H, 0x30FFFFFF);
                 }
             }
         };
-
         confirmButton.setTooltip(Tooltip.create(Component.literal("Подтвердить выбор")));
         addRenderableWidget(confirmButton);
 
+        refreshTeamList();
         createTeamButtons();
+    }
+
+    private void refreshTeamList() {
+        UUID playerId = minecraft.player.getUUID();
+        Set<String> myTeamNames = TeamManager.clientPlayerTeams.getOrDefault(playerId, Collections.emptySet());
+
+        myTeams.clear();
+        for (String teamName : myTeamNames) {
+            TeamManager.Team team = TeamManager.clientTeams.get(teamName);
+            if (team != null) {
+                myTeams.add(team);
+            }
+        }
+        myTeams.sort(Comparator.comparing(t -> t.getName()));
     }
 
     private void createTeamButtons() {
@@ -121,62 +103,40 @@ public class MyTeamsListScreen extends Screen {
         int baseX = left() + 45 - 24;
         int baseY = top() + 32 + 14 - 14;
 
-        for (int i = 0; i < VISIBLE_SLOTS; i++) {
+        int totalTeams = myTeams.size();
+        int maxVisibleIndex = Math.min(VISIBLE_SLOTS, totalTeams);
+
+        for (int i = 0; i < maxVisibleIndex; i++) {
             int index = scrollOffset + i;
-            if (index >= teamList.size()) break;
+            if (index >= totalTeams) break;
 
-            TestTeam team = teamList.get(index);
-            int buttonY = baseY + i * (PLASHKA_BASIC_H);
+            TeamManager.Team team = myTeams.get(index);
+            int buttonY = baseY + i * PLASHKA_BASIC_H;
 
-            // УБЕРИТЕ лямбду здесь - просто передайте null или метод onClick сам вызовет onTeamClicked
-            addRenderableWidget(new TeamButton(
-                    baseX, buttonY,
-                    PLASHKA_BASIC_W, PLASHKA_BASIC_H,
-                    team,
-                    btn -> {} // Пустой обработчик, так как onClick уже вызывает onTeamClicked
-            ));
+            addRenderableWidget(new TeamButton(baseX, buttonY, PLASHKA_BASIC_W, PLASHKA_BASIC_H, team));
         }
     }
 
-    private void onTeamClicked(TestTeam team) {
-        System.out.println("Клик по команде: " + team.name + " (было выбрано: " + clickedTeams.contains(team.name) + ")");
+    private void onTeamClicked(TeamManager.Team team) {
+        String teamName = team.getName();
 
-        // Если команда уже выбрана - снимаем выбор
-        if (clickedTeams.contains(team.name)) {
-            clickedTeams.remove(team.name);
-            System.out.println("Снят выбор с команды: " + team.name);
+        if (clickedTeams.contains(teamName)) {
+            clickedTeams.remove(teamName);
         } else {
-            // Если можно выбрать еще (максимум 3)
+            // Лимит выбора — 3 команды (это логично — игрок может быть максимум в 3 командах)
             if (clickedTeams.size() < 3) {
-                clickedTeams.add(team.name);
-                System.out.println("Выбрана команда: " + team.name);
-            } else {
-                System.out.println("Достигнут лимит выбора (максимум 3 команды)");
+                clickedTeams.add(teamName);
             }
         }
 
-        // Обновляем все кнопки
-        updateTeamButtons();
-    }
-
-    private void updateTeamButtons() {
-        for (var widget : renderables) {
-            if (widget instanceof TeamButton teamButton) {
-                // Кнопка активна, если её команда выбрана
-                teamButton.active = clickedTeams.contains(teamButton.team.name);
-                // Принудительно запрашиваем перерисовку кнопки
-                teamButton.setFocused(false); // Сбрасываем фокус для обновления отображения
-            }
-        }
+        createTeamButtons(); // перерисовываем кнопки
     }
 
     private void sendInvite() {
         if (!clickedTeams.isEmpty()) {
-            System.out.println("Отправка приглашений в команды: " + clickedTeams);
-            // TODO: Отправить пакеты на сервер для приглашения игрока во все выбранные команды
-            // for (String teamName : clickedTeams) {
-            //     NetworkHandler.INSTANCE.sendToServer(new InvitePlayerPacket(targetPlayerId, teamName));
-            // }
+            // TODO: Здесь будет отправка пакетов приглашения в выбранные команды
+            // Например: NetworkHandler.INSTANCE.sendToServer(new InvitePlayerPacket(targetPlayerUUID, clickedTeams));
+            System.out.println("Приглашение отправлено в команды: " + clickedTeams);
             minecraft.setScreen(parentScreen);
         }
     }
@@ -185,7 +145,6 @@ public class MyTeamsListScreen extends Screen {
         Button button = new Button(x, y, w, h, Component.empty(), b -> action.run(), (s) -> Component.empty()) {
             @Override
             public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                // Подсветка при наведении
                 if (this.isHovered()) {
                     g.fill(this.getX(), this.getY(), this.getX() + w, this.getY() + h, 0x30FFFFFF);
                 }
@@ -206,7 +165,7 @@ public class MyTeamsListScreen extends Screen {
 
     @Override
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 256) { // ESC
+        if (keyCode == 256) {
             minecraft.setScreen(parentScreen);
             return true;
         }
@@ -215,39 +174,35 @@ public class MyTeamsListScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        if (teamList.size() <= VISIBLE_SLOTS) return false;
+        int total = myTeams.size();
+        if (total <= VISIBLE_SLOTS) return false;
 
         scrollOffset -= (int) delta;
-        scrollOffset = Math.max(0, Math.min(scrollOffset, teamList.size() - VISIBLE_SLOTS));
+        scrollOffset = Math.max(0, Math.min(scrollOffset, total - VISIBLE_SLOTS));
         createTeamButtons();
         return true;
     }
 
     private class TeamButton extends Button {
-        private final TestTeam team;
-        private boolean active = false;
+        private final TeamManager.Team team;
 
-        public TeamButton(int x, int y, int width, int height, TestTeam team, Button.OnPress onPress) {
-            super(x, y, width, height, Component.empty(), onPress, DEFAULT_NARRATION);
+        public TeamButton(int x, int y, int width, int height, TeamManager.Team team) {
+            super(x, y, width, height, Component.empty(), btn -> {}, DEFAULT_NARRATION);
             this.team = team;
-            this.active = clickedTeams.contains(team.name);
         }
 
         @Override
         public void onClick(double mouseX, double mouseY) {
             super.onClick(mouseX, mouseY);
-            // Вызываем обработчик клика по команде
             MyTeamsListScreen.this.onTeamClicked(team);
         }
 
         @Override
         public void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-            // Обновляем состояние active каждый кадр на случай, если изменилось через updateTeamButtons
-            this.active = clickedTeams.contains(team.name);
+            boolean selected = clickedTeams.contains(team.getName());
 
             int u, v;
-
-            if (this.active) {
+            if (selected) {
                 u = PLASHKA_CLICKED_U;
                 v = PLASHKA_CLICKED_V;
             } else if (this.isHovered()) {
@@ -259,22 +214,14 @@ public class MyTeamsListScreen extends Screen {
             }
 
             RenderSystem.setShaderTexture(0, ATLAS);
-            g.blit(ATLAS,
-                    this.getX(),
-                    this.getY(),
-                    u, v,
-                    this.width,
-                    this.height,
-                    256, 256);
+            g.blit(ATLAS, getX(), getY(), u, v, width, height, 256, 256);
 
-            // Текст команды
-            String displayText = team.name;
-            if (team.tag != null && !team.tag.isEmpty()) {
-                displayText += " [" + team.tag + "]";
+            String displayText = team.getName();
+            if (!team.getTag().isEmpty()) {
+                displayText += " [" + team.getTag() + "]";
             }
 
-            int textColor = 0xFFFFFF;
-            g.drawString(font, displayText, this.getX() + 10, this.getY() + 8, textColor, false);
+            g.drawString(font, displayText, getX() + 10, getY() + 8, 0xFFFFFF, false);
         }
     }
 }

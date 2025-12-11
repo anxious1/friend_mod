@@ -11,6 +11,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public class TeamMemberScreen extends Screen {
@@ -62,7 +64,7 @@ public class TeamMemberScreen extends Screen {
     private static final int LEADER_W = 32;
     private static final int LEADER_H = 7;
 
-    private final Button[] playerButtons = new Button[9];
+    private final List<Button> playerButtons = new ArrayList<>();
     private int scrollOffset = 0;
     private boolean isDraggingScroller = false;
 
@@ -231,31 +233,49 @@ public class TeamMemberScreen extends Screen {
         int baseX = guiX + 10;
         int baseY = guiY + 42;
         int cellX = baseX + 21 - 9;
-        int cellY = baseY + 20 + 4 + 15;
+        int slotHeight = ONLINE_H + 1;
 
-        // Тестовые данные (в реальности брать из TeamManager)
-        Player owner = teamLeader != null ? minecraft.level.getPlayerByUUID(teamLeader) : null;
-        String[] testNames = {"Alex", "Notch", "Jeb", "Dinnerbone", "Grum", "Herobrine", "Steve", "Creeper"};
-        boolean[] testOnline = {true, true, true, true, false, false, false, false};
+        // === ДИНАМИЧЕСКИЙ СПИСОК УЧАСТНИКОВ ===
+        TeamManager.Team team = TeamManager.clientTeams.get(teamName);
+        List<UUID> members = new ArrayList<>();
+        UUID ownerId = null;
+        if (team != null) {
+            ownerId = team.getOwner();
+            members.addAll(team.getMembers());
+        }
 
-        for (int i = 0; i < 9; i++) {
-            final int index = i;
-            boolean isLeader = (owner != null && i == 0);
-            String name;
-            if (isLeader && owner != null) {
-                name = owner.getName().getString();
-            } else if (i > 0 && i - 1 < testNames.length) {
-                name = testNames[i - 1];
-            } else {
-                name = "Игрок " + (i + 1);
-            }
-            boolean online = (isLeader && owner != null) ||
-                    (i > 0 && i - 1 < testOnline.length && testOnline[i - 1]);
+        // Владелец первый
+        if (ownerId != null && members.remove(ownerId)) {
+            members.add(0, ownerId);
+        }
 
-            int buttonY = cellY + i * (ONLINE_H + 1);
+        // Очищаем старые кнопки
+        playerButtons.forEach(this::removeWidget);
+        playerButtons.clear();
+
+        // Создаём кнопки для всех
+        for (int i = 0; i < members.size(); i++) {
+            UUID playerId = members.get(i);
+            Player player = minecraft.level != null ? minecraft.level.getPlayerByUUID(playerId) : null;
+
+            String name = player != null ? player.getName().getString() : "Неизвестно";
+            boolean online = player != null;
+            boolean isOwner = playerId.equals(ownerId);
+
+            int buttonY = baseY + 20 + 4 + i * slotHeight;
+
+            final String finalName = name;
+            final UUID finalPlayerId = playerId;
 
             Button playerButton = new Button(cellX, buttonY, ONLINE_W, ONLINE_H,
-                    Component.empty(), b -> onPlayerClicked(name), s -> Component.empty()) {
+                    Component.empty(), b -> {
+                if (finalPlayerId.equals(minecraft.player.getUUID())) {
+                    minecraft.setScreen(new MyProfileScreen(TeamMemberScreen.this, Component.translatable("gui.teammod.profile")));
+                } else {
+                    minecraft.setScreen(new OtherPlayerProfileScreen(finalPlayerId, TeamMemberScreen.this,
+                            Component.literal("Профиль " + finalName)));
+                }
+            }, s -> Component.empty()) {
                 @Override
                 public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
                     if (!this.visible) return;
@@ -263,14 +283,8 @@ public class TeamMemberScreen extends Screen {
                     int bgV = online ? ONLINE_V : 175;
                     g.blit(ATLAS, getX(), getY(), ONLINE_U, bgV, ONLINE_W, ONLINE_H, 256, 256);
 
-                    // Рисуем скин (для лидера - реальный скин, для остальных - тестовый)
-                    ResourceLocation skin;
-                    if (isLeader && owner != null) {
-                        skin = minecraft.getSkinManager().getInsecureSkinLocation(owner.getGameProfile());
-                    } else {
-                        // Используем скин текущего игрока как заглушку
-                        skin = minecraft.getSkinManager().getInsecureSkinLocation(minecraft.player.getGameProfile());
-                    }
+                    ResourceLocation skin = minecraft.getSkinManager().getInsecureSkinLocation(
+                            player != null ? player.getGameProfile() : minecraft.player.getGameProfile());
 
                     int headX = getX() + 3;
                     int headY = getY() + (ONLINE_H - 8) / 2;
@@ -279,16 +293,14 @@ public class TeamMemberScreen extends Screen {
                     g.blit(skin, headX, headY, 8, 8, 40, 8, 8, 8, 64, 64);
                     RenderSystem.disableBlend();
 
-                    // Формируем текст
                     String tagPart = (showTag && teamTag != null && !teamTag.isEmpty()) ? "[" + teamTag + "]" : "";
-                    String fullText = name + tagPart;
+                    String fullText = finalName + tagPart;
                     if (font.width(fullText) > ONLINE_W - 22) {
                         fullText = font.plainSubstrByWidth(fullText, ONLINE_W - 25) + "..";
                     }
                     g.drawString(font, fullText, getX() + 14, getY() + 4, 0xFFFFFF, false);
 
-                    // Метка лидера
-                    if (isLeader) {
+                    if (isOwner) {
                         g.blit(ATLAS, getX() + ONLINE_W - LEADER_W - 2, getY() + ONLINE_H - LEADER_H - 1,
                                 LEADER_U, LEADER_V, LEADER_W, LEADER_H, 256, 256);
                     }
@@ -299,11 +311,11 @@ public class TeamMemberScreen extends Screen {
                 }
             };
 
-            updateVisibleButtons();
-            playerButton.visible = (i < 3);
-            playerButtons[i] = playerButton;
+            playerButtons.add(playerButton);
             addRenderableWidget(playerButton);
         }
+
+        updateVisibleButtons();
     }
 
     private void onPlayerClicked(String playerName) {
@@ -385,15 +397,20 @@ public class TeamMemberScreen extends Screen {
         }
 
         // ПОЛЗУНОК
-        int baseX = guiX + 10;
-        int baseY = guiY + 42;
-        int trackHeight = 46;
-        int maxScroll = Math.max(0, 9 - 3);
-        int scrollerOffset = maxScroll == 0 ? 0 :
-                (int)((float)scrollOffset / maxScroll * (trackHeight - SCROLL_H));
-        g.blit(ATLAS, baseX + 13 - 8, baseY + 5 + 20 + 4 + 10 + scrollerOffset,
-                SCROLL_U, SCROLL_V, SCROLL_W, SCROLL_H, 256, 256);
+        // ── ПОЛЗУНОК (только если участников больше 3) ─────────────────────────────
+        int totalPlayers = playerButtons.size();
+        if (totalPlayers > 3) {
+            int baseX = guiX + 10;
+            int baseY = guiY + 42;
 
+            int visibleHeight = 3 * (ONLINE_H + 1); // высота видимой области (3 слота)
+            int maxScroll = totalPlayers - 3;
+            int scrollerOffset = maxScroll == 0 ? 0 :
+                    (int)((float)scrollOffset / maxScroll * (visibleHeight - SCROLL_H));
+
+            g.blit(ATLAS, baseX + 13 - 8, baseY + 5 + 20 + 4 + 10 + scrollerOffset,
+                    SCROLL_U, SCROLL_V, SCROLL_W, SCROLL_H, 256, 256);
+        }
         // XP БАР
         int xpBarX = guiX + 10 + 21 - 9 - 7;
         int xpBarY = guiY + 42 + 20 + 4 + 15 + (3 * (ONLINE_H + 1)) + 5 + 13;
@@ -467,24 +484,26 @@ public class TeamMemberScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double deltaY) {
-        if (9 <= 3) return false;
+        int total = playerButtons.size();
+        if (total <= 3) return false; // если ≤3 — скролл не нужен
 
-        int oldOffset = scrollOffset;
+        int maxScroll = total - 3; // сколько можно проскроллить
         scrollOffset -= (int) deltaY;
-        scrollOffset = Math.max(0, Math.min(scrollOffset, 9 - 3));
-
-        if (oldOffset != scrollOffset) {
-            updateVisibleButtons();
-        }
+        scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
+        updateVisibleButtons();
         return true;
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        int totalPlayers = playerButtons.size();
+        if (totalPlayers <= 3) return super.mouseClicked(mouseX, mouseY, button);
+
         int trackX = left() + 21 - 9 - 9;
         int trackY = top() + 20 + 4 + 15 + 18;
+        int trackHeight = 3 * (ONLINE_H + 1); // высота трека под 3 видимых слота
 
-        if (mouseX >= trackX && mouseX <= trackX + 7 && mouseY >= trackY && mouseY <= trackY + 50) {
+        if (mouseX >= trackX && mouseX <= trackX + 7 && mouseY >= trackY && mouseY <= trackY + trackHeight) {
             isDraggingScroller = true;
             updateScrollFromMouse(mouseY);
             return true;
@@ -509,33 +528,35 @@ public class TeamMemberScreen extends Screen {
 
     private void updateScrollFromMouse(double mouseY) {
         int trackY = top() + 20 + 4 + 15 + 18;
+        int trackHeight = 3 * (ONLINE_H + 1);
+
         double rel = mouseY - trackY;
-        rel = Math.max(0, Math.min(rel, 50 - 12));
+        rel = Math.max(0, Math.min(rel, trackHeight - SCROLL_H));
 
-        float ratio = (float) rel / (50 - 12);
-        int maxScroll = 9 - 3;
-        int newOffset = Math.round(ratio * maxScroll);
-        newOffset = Math.max(0, Math.min(newOffset, maxScroll));
+        float ratio = (float) rel / (trackHeight - SCROLL_H);
+        int maxScroll = Math.max(0, playerButtons.size() - 3);
+        scrollOffset = Math.round(ratio * maxScroll);
+        scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
 
-        if (scrollOffset != newOffset) {
-            scrollOffset = newOffset;
-            updateVisibleButtons();
-        }
+        updateVisibleButtons();
     }
 
     private void updateVisibleButtons() {
-        int baseY = top() + 42 + 20 + 4 + 15;
+        if (playerButtons.isEmpty()) return;
 
-        for (int i = 0; i < 9; i++) {
-            if (playerButtons[i] != null) {
-                int visibleIndex = i - scrollOffset;
+        int visibleSlots = 3; // сколько строк видно одновременно в текстуре — это фиксировано!
+        int slotHeight = ONLINE_H + 1; // 15 + 1 = 16 пикселей на слот
+        int startY = top() + 42 + 20 + 4; // начальная Y первого видимого слота
 
-                if (visibleIndex >= 0 && visibleIndex < 3) {
-                    playerButtons[i].setY(baseY + visibleIndex * (ONLINE_H + 1));
-                    playerButtons[i].visible = true;
-                } else {
-                    playerButtons[i].visible = false;
-                }
+        for (int i = 0; i < playerButtons.size(); i++) {
+            Button button = playerButtons.get(i);
+            int visibleIndex = i - scrollOffset;
+
+            if (visibleIndex >= 0 && visibleIndex < visibleSlots) {
+                button.setY(startY + visibleIndex * slotHeight);
+                button.visible = true;
+            } else {
+                button.visible = false;
             }
         }
     }

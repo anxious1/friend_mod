@@ -2,7 +2,10 @@ package com.mom.teammod.packets;
 
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.TeamManager;
+import com.mom.teammod.TeamProfileOwner;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.PacketDistributor;
@@ -11,7 +14,7 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 public class AcceptInvitationPacket {
-    private String teamName;
+    private final String teamName;
 
     public AcceptInvitationPacket(String teamName) {
         this.teamName = teamName;
@@ -34,7 +37,7 @@ public class AcceptInvitationPacket {
                 if (team != null) {
                     TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName);
 
-                    // Отправляем ВСЕМ участникам команды (включая новенького)
+                    // Отправляем всем участникам
                     for (UUID memberUUID : team.getMembers()) {
                         ServerPlayer player = ctx.get().getSender().getServer()
                                 .getPlayerList().getPlayer(memberUUID);
@@ -44,6 +47,23 @@ public class AcceptInvitationPacket {
                                     syncPacket
                             );
                         }
+                    }
+
+                    // Если это ТЫ принял приглашение — открываем профиль команды
+                    if (playerUUID.equals(Minecraft.getInstance().player.getUUID())) {
+                        Minecraft.getInstance().execute(() -> {
+                            Minecraft mc = Minecraft.getInstance();
+                            mc.setScreen(new TeamProfileOwner(
+                                    null,
+                                    mc.player.getInventory(),
+                                    Component.literal(pkt.teamName),
+                                    pkt.teamName,
+                                    team.getTag(),
+                                    mc.player.getUUID().equals(team.getOwner()),
+                                    team.showTag(),
+                                    team.isFriendlyFire()
+                            ));
+                        });
                     }
                 }
             }
