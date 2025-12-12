@@ -45,6 +45,17 @@ minecraft {
             workingDirectory project.file('run-data')
             args '--mod', mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
         }
+        client2 {
+            // Правильный способ наследования в FG6
+            parent runs.client
+
+            // Уникальный ник и UUID — этого достаточно
+            args '--username', 'Player2'
+            args '--uuid', '00000000-0000-0000-0000-000000000002'
+
+            // Опционально больше памяти (если лагает)
+            // jvmArgs '-Xmx4G'
+        }
     }
 }
 

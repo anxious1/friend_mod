@@ -35,7 +35,7 @@ public class AcceptInvitationPacket {
             if (TeamManager.acceptInvitation(pkt.teamName, playerUUID)) {
                 TeamManager.Team team = TeamManager.getServerTeam(pkt.teamName);
                 if (team != null) {
-                    TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName);
+                    TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName,team.serializeNBT());
 
                     // Отправляем всем участникам
                     for (UUID memberUUID : team.getMembers()) {

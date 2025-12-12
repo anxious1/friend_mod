@@ -1,6 +1,8 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mom.teammod.packets.InvitePlayerPacket;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -28,7 +30,7 @@ public class MyTeamsListScreen extends Screen {
 
     // Реальные команды игрока
     private List<TeamManager.Team> myTeams = new ArrayList<>();
-    private final Set<String> clickedTeams = new HashSet<>();
+    public final Set<String> clickedTeams = new HashSet<>();
     private int scrollOffset = 0;
 
     private final Screen parentScreen;
@@ -57,6 +59,12 @@ public class MyTeamsListScreen extends Screen {
                 () -> minecraft.setScreen(parentScreen),
                 Component.literal("Назад")
         );
+
+        // Удаляем старую кнопку confirm, если она осталась от предыдущего init
+        if (confirmButton != null) {
+            removeWidget(confirmButton);
+            confirmButton = null;
+        }
 
         confirmButton = new Button(
                 x + GUI_WIDTH - CONFIRM_W - 20 - 22 - 32,
@@ -133,12 +141,28 @@ public class MyTeamsListScreen extends Screen {
     }
 
     private void sendInvite() {
-        if (!clickedTeams.isEmpty()) {
-            // TODO: Здесь будет отправка пакетов приглашения в выбранные команды
-            // Например: NetworkHandler.INSTANCE.sendToServer(new InvitePlayerPacket(targetPlayerUUID, clickedTeams));
-            System.out.println("Приглашение отправлено в команды: " + clickedTeams);
-            minecraft.setScreen(parentScreen);
+        if (clickedTeams.isEmpty()) {
+            return;
         }
+
+        // Отключаем кнопку сразу — защита от двойного клика
+        confirmButton.active = false;
+        confirmButton.visible = false;
+
+        String targetName = "Unknown";
+        if (parentScreen instanceof OtherPlayerProfileScreen profile) {
+            targetName = profile.playerName;
+        }
+
+        // Отправляем приглашения
+        for (String teamName : clickedTeams) {
+            NetworkHandler.INSTANCE.sendToServer(new InvitePlayerPacket(teamName, targetName));
+        }
+
+        // Закрываем экран с небольшой задержкой, чтобы пакеты точно ушли
+        Minecraft.getInstance().execute(() -> {
+            minecraft.setScreen(parentScreen);
+        });
     }
 
     private Button addTransparentButton(int x, int y, int w, int h, Runnable action, Component tooltip) {

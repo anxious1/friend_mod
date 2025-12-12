@@ -295,38 +295,34 @@ public class TeamProfileOwner extends Screen {
         int guiX = left();
         int guiY = top();
 
-        // ── Твой старый код (оставляем без изменений) ─────────────────────────────
+        // Название команды
         g.drawCenteredString(font, teamName, guiX + 19 + OFFSET_X/4 - 2, guiY + OFFSET_Y/4 - 2, 0xFFFFFF);
 
-        if (teamTag != null && !teamTag.isEmpty() && showTag) {
-            g.drawCenteredString(font, teamTag, guiX + 19 + OFFSET_X/4 - 2, guiY + 26 + OFFSET_Y/4 - 15, 0xFFFFFF);
+        // Тег (только если включён)
+        TeamManager.Team actualTeam = TeamManager.clientTeams.get(teamName);
+        if (actualTeam != null && actualTeam.showTag() && !actualTeam.getTag().isEmpty()) {
+            g.drawCenteredString(font, actualTeam.getTag(), guiX + 19 + OFFSET_X/4 - 2, guiY + 26 + OFFSET_Y/4 - 15, 0xFFFFFF);
         }
 
+        // Онлайн/всего
         int[] stats = getOnlineAndTotalPlayers();
         g.drawCenteredString(font, stats[0] + "/" + stats[1], guiX + 118 + OFFSET_X/4 - 2, guiY + 13 + OFFSET_Y/4 + 2, 0xFFFFFF);
 
         RenderSystem.setShaderTexture(0, ATLAS);
-        if (showTag)      g.blit(ATLAS, guiX + 118 - 14 + OFFSET_X/4 - 2, guiY + 34 + OFFSET_Y/4 - 1, TAG_U,    TAG_V,    TAG_W,    TAG_H,    256, 256);
-        if (showCompass)  g.blit(ATLAS, guiX + 118 - 7  + OFFSET_X/4 - 2, guiY + 51 + OFFSET_Y/4 - 1, COMPASS_U, COMPASS_V, COMPASS_W, COMPASS_H, 256, 256);
-        if (friendlyFire) g.blit(ATLAS, guiX + 118 - 6 + OFFSET_X/4 - 2, guiY + 72 + OFFSET_Y/4 - 1, FFON_U,    FFON_V,    FFON_W,    FFON_H,    256, 256);
 
-        // ── ПОЛЗУНОК (единственное, что рисуем вручную) ─────────────────────────────
-        // ── ПОЛЗУНОК (только если участников больше 3) ─────────────────────────────
-        int totalPlayers = playerButtons.size();
-        if (totalPlayers > 3) {
-            int baseX = guiX + 10;
-            int baseY = guiY + 42;
-
-            int visibleHeight = 3 * (ONLINE_H + 1); // высота видимой области (3 слота)
-            int maxScroll = totalPlayers - 3;
-            int scrollerOffset = maxScroll == 0 ? 0 :
-                    (int)((float)scrollOffset / maxScroll * (visibleHeight - SCROLL_H));
-
-            g.blit(ATLAS, baseX + 13 - 8, baseY + 5 + 20 + 4 + 10 + scrollerOffset,
-                    SCROLL_U, SCROLL_V, SCROLL_W, SCROLL_H, 256, 256);
+        // Иконки — только если включены в актуальной команде
+        if (actualTeam != null) {
+            if (actualTeam.showTag()) {
+                g.blit(ATLAS, guiX + 118 - 14 + OFFSET_X/4 - 2, guiY + 34 + OFFSET_Y/4 - 1, TAG_U, TAG_V, TAG_W, TAG_H, 256, 256);
+            }
+            if (actualTeam.showCompass()) {
+                g.blit(ATLAS, guiX + 118 - 7 + OFFSET_X/4 - 2, guiY + 51 + OFFSET_Y/4 - 1, COMPASS_U, COMPASS_V, COMPASS_W, COMPASS_H, 256, 256);
+            }
+            if (actualTeam.isFriendlyFire()) {
+                g.blit(ATLAS, guiX + 118 - 6 + OFFSET_X/4 - 2, guiY + 72 + OFFSET_Y/4 - 1, FFON_U, FFON_V, FFON_W, FFON_H, 256, 256);
+            }
         }
 
-        // ── ВСЁ ОСТАЛЬНОЕ РИСУЮТ КНОПКИ САМИ (super.render) ───────────────────────
         super.render(g, mouseX, mouseY, partialTick);
     }
 

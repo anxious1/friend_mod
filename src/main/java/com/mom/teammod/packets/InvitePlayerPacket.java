@@ -33,6 +33,8 @@ public class InvitePlayerPacket {
     public static void handle(InvitePlayerPacket pkt, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             ServerPlayer inviter = ctx.get().getSender();
+            if (inviter == null) return;
+
             ServerPlayer invited = inviter.getServer().getPlayerList().getPlayerByName(pkt.playerName);
 
             if (invited == null) {
@@ -40,8 +42,11 @@ public class InvitePlayerPacket {
                 return;
             }
 
-            if (TeamManager.invitePlayer(pkt.teamName, invited.getUUID(), inviter)) {
-                // Красивое сообщение с кнопками
+            // Попытка приглашения
+            boolean success = TeamManager.invitePlayer(pkt.teamName, invited.getUUID(), inviter);
+
+            if (success) {
+                // Красивое сообщение приглашённому
                 Component acceptButton = Component.literal("[Принять]")
                         .withStyle(style -> style
                                 .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/teammod_accept " + pkt.teamName))
@@ -60,15 +65,13 @@ public class InvitePlayerPacket {
                 );
 
                 inviter.sendSystemMessage(Component.literal("§aПриглашение отправлено игроку §f" + pkt.playerName));
-
-                // Синхронизация — безопасно и без крашей
-                TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName);
-
-                NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> invited), syncPacket);
-                NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> inviter), syncPacket);
             } else {
                 inviter.sendSystemMessage(Component.literal("§cНе удалось отправить приглашение (возможно, лимит команд или уже приглашён)."));
             }
+
+            // КРИТИЧЕСКИ ВАЖНО: синхронизируем состояние команды ВСЕМ игрокам в ЛЮБОМ случае
+            // Это полностью решает проблему с удалением команды при повторном приглашении
+            TeamManager.syncTeamToAll(pkt.teamName);
         });
         ctx.get().setPacketHandled(true);
     }

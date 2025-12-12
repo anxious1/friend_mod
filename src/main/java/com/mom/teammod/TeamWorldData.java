@@ -16,19 +16,33 @@ public class TeamWorldData extends SavedData {
 
     private static final String DATA_NAME = TeamMod.MODID + "_teams";
 
-    public TeamWorldData() {}
+    public TeamWorldData() {
+    }
 
     public TeamWorldData(CompoundTag nbt) {
-        // Загрузка команд
+        load(nbt);
+    }
+
+    private void load(CompoundTag nbt) {
+        teams.clear();
+        playerTeams.clear();
+
         ListTag teamsList = nbt.getList("teams", 10);
         for (int i = 0; i < teamsList.size(); i++) {
             CompoundTag teamTag = teamsList.getCompound(i);
-            TeamManager.Team team = new TeamManager.Team("", null);
-            team.deserializeNBT(teamTag);
-            teams.put(team.getName(), team);
+
+            // ВАЖНО: сначала читаем имя из NBT, потом создаём объект
+            String teamName = teamTag.getString("name");
+            if (teamName.isEmpty()) {
+                System.out.println("[TeamWorldData] Пропуск команды без имени в NBT!");
+                continue;
+            }
+
+            TeamManager.Team team = new TeamManager.Team(teamName, null);
+            team.deserializeNBT(teamTag); // ← теперь имя уже есть, всё остальное заполнится
+            teams.put(teamName, team);
         }
 
-        // Загрузка playerTeams
         ListTag playerList = nbt.getList("playerTeams", 10);
         for (int i = 0; i < playerList.size(); i++) {
             CompoundTag entry = playerList.getCompound(i);
@@ -40,18 +54,18 @@ public class TeamWorldData extends SavedData {
             }
             playerTeams.put(player, set);
         }
+
+        System.out.println("[TeamWorldData] Загружено команд: " + teams.size());
     }
 
     @Override
     public CompoundTag save(CompoundTag nbt) {
-        // Сохранение команд
         ListTag teamsList = new ListTag();
         for (TeamManager.Team team : teams.values()) {
             teamsList.add(team.serializeNBT());
         }
         nbt.put("teams", teamsList);
 
-        // Сохранение playerTeams
         ListTag playerList = new ListTag();
         for (Map.Entry<UUID, Set<String>> entry : playerTeams.entrySet()) {
             CompoundTag e = new CompoundTag();
@@ -77,11 +91,18 @@ public class TeamWorldData extends SavedData {
     }
 
     public static TeamWorldData get(ServerLevel level) {
-        DimensionDataStorage storage = level.getDataStorage();
-        return storage.computeIfAbsent(TeamWorldData::load, TeamWorldData::new, DATA_NAME);
-    }
+        System.out.println("[TeamWorldData] get вызван для уровня " + level.dimension().location());
 
-    private static TeamWorldData load(CompoundTag nbt) {
-        return new TeamWorldData(nbt);
+        DimensionDataStorage storage = level.getDataStorage();
+
+        TeamWorldData data = storage.computeIfAbsent(
+                TeamWorldData::new,     // новый объект
+                TeamWorldData::new,     // загрузка из NBT
+                DATA_NAME               // имя файла
+        );
+
+        System.out.println("[TeamWorldData] data получен: " + (data != null ? "OK (teams=" + data.getTeams().size() + ")" : "NULL!"));
+
+        return data;
     }
 }

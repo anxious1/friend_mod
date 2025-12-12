@@ -3,6 +3,7 @@ package com.mom.teammod;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mom.teammod.packets.DeleteTeamPacket;
 import com.mom.teammod.packets.TeamSyncPacket;
+import com.mom.teammod.packets.UpdateTeamSettingsPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -300,13 +301,21 @@ public class CustomizationScreen extends Screen {
             removeWidget(confirmButton);
             confirmButton = null;
         }
-        if (isModified) {
+
+        boolean modified = showTag != originalShowTag ||
+                showCompass != originalShowCompass ||
+                friendlyFire != originalFriendlyFire;
+
+        if (modified) {
             int guiX = left();
             int guiY = top();
+
             confirmButton = new Button(guiX + 147, guiY + 139, CONFIRM_W, CONFIRM_H, Component.empty(), b -> applyChanges(), s -> Component.empty()) {
                 @Override
                 public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                    if (isHovered()) g.fill(getX(), getY(), getX() + width, getY() + height, 0x30FFFFFF);
+                    if (isHovered()) {
+                        g.fill(getX(), getY(), getX() + width, getY() + height, 0x30FFFFFF);
+                    }
                     RenderSystem.setShaderTexture(0, ATLAS);
                     g.blit(ATLAS, getX(), getY(), CONFIRM_U, CONFIRM_V, CONFIRM_W, CONFIRM_H, 256, 256);
                 }
@@ -317,12 +326,18 @@ public class CustomizationScreen extends Screen {
     }
 
     private void applyChanges() {
-        if (team != null) {
-            team.setShowTag(showTag);
-            team.setShowCompass(showCompass);
-            team.setFriendlyFire(friendlyFire);
-            NetworkHandler.INSTANCE.sendToServer(new TeamSyncPacket(team.getName()));
-        }
+        if (team == null) return;
+
+        // НИЧЕГО НЕ МЕНЯЕМ В ЛОКАЛЬНОМ team!
+        // Только отправляем пакет на сервер — он сам всё сохранит и разошлёт всем
+        NetworkHandler.INSTANCE.sendToServer(new UpdateTeamSettingsPacket(
+                team.getName(),
+                showTag,
+                showCompass,
+                friendlyFire
+        ));
+
+        // Закрываем окно — обновление придёт через TeamSyncPacket автоматически
         minecraft.setScreen(parent);
     }
 

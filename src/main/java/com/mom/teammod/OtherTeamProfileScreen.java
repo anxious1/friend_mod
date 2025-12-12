@@ -406,17 +406,17 @@ public class OtherTeamProfileScreen extends Screen {
 
         // Иконки настроек команды
         RenderSystem.setShaderTexture(0, ATLAS);
-        if (showTag) {
-            g.blit(ATLAS, guiX + 118 - 14 + OFFSET_X/4 - 2, guiY + 34 + OFFSET_Y/4 - 1,
-                    TAG_U, TAG_V, TAG_W, TAG_H, 256, 256);
-        }
-        if (showCompass) {
-            g.blit(ATLAS, guiX + 118 - 7 + OFFSET_X/4 - 2, guiY + 51 + OFFSET_Y/4 - 1,
-                    COMPASS_U, COMPASS_V, COMPASS_W, COMPASS_H, 256, 256);
-        }
-        if (friendlyFire) {
-            g.blit(ATLAS, guiX + 118 - 6 + OFFSET_X/4 - 2, guiY + 72 + OFFSET_Y/4 - 1,
-                    FFON_U, FFON_V, FFON_W, FFON_H, 256, 256);
+        TeamManager.Team actualTeam = TeamManager.clientTeams.get(teamName);
+        if (actualTeam != null) {
+            if (actualTeam.showTag()) {
+                g.blit(ATLAS, guiX + 118 - 14 + OFFSET_X/4 - 2, guiY + 34 + OFFSET_Y/4 - 1, TAG_U, TAG_V, TAG_W, TAG_H, 256, 256);
+            }
+            if (actualTeam.showCompass()) {
+                g.blit(ATLAS, guiX + 118 - 7 + OFFSET_X/4 - 2, guiY + 51 + OFFSET_Y/4 - 1, COMPASS_U, COMPASS_V, COMPASS_W, COMPASS_H, 256, 256);
+            }
+            if (actualTeam.isFriendlyFire()) {
+                g.blit(ATLAS, guiX + 118 - 6 + OFFSET_X/4 - 2, guiY + 72 + OFFSET_Y/4 - 1, FFON_U, FFON_V, FFON_W, FFON_H, 256, 256);
+            }
         }
 
         // ── ПОЛЗУНОК (только если участников больше 3) ─────────────────────────────

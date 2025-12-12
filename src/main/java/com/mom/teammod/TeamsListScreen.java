@@ -114,25 +114,16 @@ public class TeamsListScreen extends Screen {
     private void refreshTeamList() {
         Set<String> myTeams = TeamManager.clientPlayerTeams.getOrDefault(minecraft.player.getUUID(), Collections.emptySet());
 
-        // Обновляем только если список изменился
-        boolean changed = allTeams.size() != TeamManager.clientTeams.size();
-        if (!changed) {
-            for (TeamEntry entry : allTeams) {
-                if (!myTeams.contains(entry.team.getName()) != !entry.isMember) {
-                    changed = true;
-                    break;
-                }
+        allTeams.clear();
+        for (TeamManager.Team team : TeamManager.clientTeams.values()) {
+            // НЕ показываем команды, в которых игрок уже состоит
+            if (!myTeams.contains(team.getName())) {
+                allTeams.add(new TeamEntry(team, false));
             }
         }
 
-        if (changed) {
-            allTeams.clear();
-            for (TeamManager.Team team : TeamManager.clientTeams.values()) {
-                allTeams.add(new TeamEntry(team, myTeams.contains(team.getName())));
-            }
-            allTeams.sort(Comparator.comparing(t -> t.team.getName()));
-            applySearchFilter();
-        }
+        allTeams.sort(Comparator.comparing(t -> t.team.getName()));
+        applySearchFilter();
     }
 
     private void applySearchFilter() {

@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mom.teammod.packets.RespondInvitationPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ImageButton;
@@ -343,38 +344,55 @@ public class MyProfileScreen extends Screen {
         }
     }
 
+    // 2. MyProfileScreen.java — метод renderTeamList
     private void renderTeamList(GuiGraphics g) {
-        int baseX = (width - GUI_WIDTH) / 2;
-        int baseY = (height - GUI_HEIGHT) / 2;
+        // Удаляем старый код, где заполняется teamList всеми командами
 
-        int startX = baseX + 111 + 41 + 10 + 20 + 10 + 10 + 10 + 1 + (int)(8 / 0.75f);
-        int startY = baseY + 30 - 8 + 7 + 1 + 2; // ← весь список на 2 пикселя ниже
+        // Заменяем на правильный список приглашений
+        this.renderables.removeIf(w -> w instanceof TextureButton);
 
-        if (teamList.isEmpty()) {
-            Set<String> myTeams = TeamManager.clientPlayerTeams.getOrDefault(minecraft.player.getUUID(), Collections.emptySet());
-            teamList.clear();
-            for (TeamManager.Team team : TeamManager.clientTeams.values()) {
-                teamList.add(team);
+        UUID myId = minecraft.player.getUUID();
+        List<TeamManager.Team> invitations = new ArrayList<>();
+        for (TeamManager.Team team : TeamManager.clientTeams.values()) {
+            if (team.getInvited().contains(myId)) {
+                invitations.add(team);
             }
-            teamList.sort(Comparator.comparing(TeamManager.Team::getName));
         }
 
-        int currentY = startY; // ← ВОТ ЭТА СТРОЧКА ДВИГАЛА КНОПКИ
+        invitations.sort(new Comparator<TeamManager.Team>() {
+            @Override
+            public int compare(TeamManager.Team t1, TeamManager.Team t2) {
+                return t1.getName().compareTo(t2.getName());
+            }
+        });
 
-        int maxVisible = Math.min(4, teamList.size());
+        int baseX = (width - GUI_WIDTH) / 2;
+        int baseY = (height - GUI_HEIGHT) / 2;
+        int startX = baseX + 111 + 41 + 10 + 20 + 10 + 10 + 10 + 1 + (int)(8 / 0.75f);
+        int startY = baseY + 30 - 8 + 7 + 1 + 2;
 
+        int maxVisible = Math.min(4, invitations.size());
         for (int i = 0; i < maxVisible; i++) {
             int index = i + scrollOffset;
-            if (index >= teamList.size()) break;
+            if (index >= invitations.size()) break;
 
-            TeamManager.Team team = teamList.get(index);
+            TeamManager.Team team = invitations.get(index);
             String tag = team.getTag();
-            int invY = currentY + i * (INV_H + X_H + 2);
+            int invY = startY + i * (INV_H + X_H + 2);
             int underY = invY + INV_H;
 
             // INV + тег
             addRenderableWidget(new TextureButton(startX, invY, INV_W, INV_H, INV_U, INV_V, ATLAS, btn -> {
-                System.out.println("Команда: " + team.getName());
+                // Открываем просмотр чужой команды
+                minecraft.setScreen(new OtherTeamProfileScreen(
+                        MyProfileScreen.this,
+                        team.getName(),
+                        team.getTag(),
+                        team.showTag(),
+                        team.showCompass(),
+                        team.isFriendlyFire(),
+                        team.getOwner()
+                ));
             }) {
                 @Override
                 protected void renderWidget(GuiGraphics gg, int mx, int my, float pt) {
@@ -392,14 +410,14 @@ public class MyProfileScreen extends Screen {
                 }
             });
 
-            // X
-            addRenderableWidget(new TextureButton(startX + 5 + 20 - 24 -1 , underY, X_W, X_H, X_U, X_V, ATLAS, btn -> {
-                System.out.println("X: " + team.getName());
+            // X — отклонить
+            addRenderableWidget(new TextureButton(startX + 35, underY, X_W, X_H, X_U, X_V, ATLAS, btn -> {
+                NetworkHandler.INSTANCE.sendToServer(new RespondInvitationPacket(team.getName(), false));
             }));
 
-            // V
-            addRenderableWidget(new TextureButton(startX + 5 + 20 + X_W - 24-1, underY, V_W, V_H, V_U, V_V, ATLAS, btn -> {
-                System.out.println("V: " + team.getName());
+            // V — принять
+            addRenderableWidget(new TextureButton(startX + 60, underY, V_W, V_H, V_U, V_V, ATLAS, btn -> {
+                NetworkHandler.INSTANCE.sendToServer(new RespondInvitationPacket(team.getName(), true));
             }));
         }
     }

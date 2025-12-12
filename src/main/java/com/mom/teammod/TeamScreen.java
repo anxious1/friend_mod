@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mom.teammod.packets.RespondInvitationPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -453,57 +454,30 @@ public class TeamScreen extends Screen {
         int baseY = (height - GUI_HEIGHT) / 2;
 
         int startX = baseX + 111 + 41 + 10 + 20 + 10 + 10 + 10 + 1 + (int)(8 / 0.75f);
-        int startY = baseY + 30 - 8 + 7 + 1 + 2; // ← весь список на 2 пикселя ниже
+        int startY = baseY + 30 - 8 + 7 + 1 + 2;
 
-        if (teamList.isEmpty()) {
-            Set<String> myTeams = TeamManager.clientPlayerTeams.getOrDefault(minecraft.player.getUUID(), Collections.emptySet());
-            teamList.clear();
-            for (TeamManager.Team team : TeamManager.clientTeams.values()) {
-                teamList.add(team);
+        this.renderables.removeIf(w -> w instanceof InvitationSlot);
+
+        UUID myId = minecraft.player.getUUID();
+        List<TeamManager.Team> invitations = new ArrayList<>();
+
+        for (TeamManager.Team team : TeamManager.clientTeams.values()) {
+            if (team.getInvited().contains(myId)) {
+                invitations.add(team);
             }
-            teamList.sort(Comparator.comparing(TeamManager.Team::getName));
         }
 
-        int maxVisible = Math.min(4, teamList.size());
+        invitations.sort(Comparator.comparing(TeamManager.Team::getName));
 
+        int maxVisible = Math.min(4, invitations.size());
         for (int i = 0; i < maxVisible; i++) {
             int index = i + scrollOffset;
-            if (index >= teamList.size()) break;
+            if (index >= invitations.size()) break;
 
-            TeamManager.Team team = teamList.get(index);
-            String tag = team.getTag();
-            int invY = startY + i * (INV_H + X_H + 2);
-            int underY = invY + INV_H;
+            TeamManager.Team team = invitations.get(index);
+            int slotY = startY + i * (INV_H + X_H + 2);
 
-            // INV + тег
-            addRenderableWidget(new TextureButton(startX, invY, INV_W, INV_H, INV_U, INV_V, PROFILE_ATLAS, btn -> {
-                System.out.println("Команда: " + team.getName());
-            }) {
-                @Override
-                protected void renderWidget(GuiGraphics gg, int mx, int my, float pt) {
-                    super.renderWidget(gg, mx, my, pt);
-                    if (!tag.isEmpty()) {
-                        float scale = 0.75f;
-                        gg.pose().pushPose();
-                        gg.pose().scale(scale, scale, scale);
-                        int tx = (int) ((this.getX() + INV_W / 2 + 1.25f) / scale) - font.width(tag) / 2;
-                        int ty = (int) ((invY + INV_H / 2 - 2) / scale);
-                        gg.drawString(font, tag, tx + 1, ty + 1, 0x000000, false);
-                        gg.drawString(font, tag, tx, ty, 0xFFFFFF, false);
-                        gg.pose().popPose();
-                    }
-                }
-            });
-
-            // X
-            addRenderableWidget(new TextureButton(startX + 5 + 20 - 24 -1 , underY, X_W, X_H, X_U, X_V, PROFILE_ATLAS, btn -> {
-                System.out.println("X: " + team.getName());
-            }));
-
-            // V
-            addRenderableWidget(new TextureButton(startX + 5 + 20 + X_W - 24-1, underY, V_W, V_H, V_U, V_V, PROFILE_ATLAS, btn -> {
-                System.out.println("V: " + team.getName());
-            }));
+            addRenderableWidget(new InvitationSlot(startX, slotY, team));
         }
     }
 
@@ -636,5 +610,65 @@ public class TeamScreen extends Screen {
                 ));
             }
         });
+    }
+
+    private class InvitationSlot extends AbstractWidget {
+        private final TeamManager.Team team;
+
+        public InvitationSlot(int x, int y, TeamManager.Team team) {
+            super(x, y, 100, 30, Component.empty());
+            this.team = team;
+        }
+
+        @Override
+        public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+            String tag = team.getTag().isEmpty() ? "" : "[" + team.getTag() + "] ";
+            String text = tag + team.getName();
+            g.drawString(font, text, getX() + 4, getY() + 6, 0xFFFFFF, false);
+
+            // INV кнопка
+            g.blit(PROFILE_ATLAS, getX() + 4, getY() + 14, INV_U, INV_V, INV_W, INV_H, 256, 256);
+            // X кнопка
+            g.blit(PROFILE_ATLAS, getX() + 35, getY() + 14, X_U, X_V, X_W, X_H, 256, 256);
+            // V кнопка
+            g.blit(PROFILE_ATLAS, getX() + 60, getY() + 14, V_U, V_V, V_W, V_H, 256, 256);
+        }
+
+        @Override
+        public boolean mouseClicked(double mx, double my, int btn) {
+            if (btn != 0) return false;
+
+            // INV — открыть профиль команды
+            if (mx >= getX() + 4 && mx <= getX() + 27 && my >= getY() + 14 && my <= getY() + 30) {
+                minecraft.setScreen(new TeamProfileOwner(
+                        null,
+                        minecraft.player.getInventory(),
+                        Component.literal(team.getName()),
+                        team.getName(),
+                        team.getTag(),
+                        minecraft.player.getUUID().equals(team.getOwner()),
+                        team.showTag(),
+                        team.isFriendlyFire()
+                ));
+                return true;
+            }
+
+            // X — отклонить
+            if (mx >= getX() + 35 && mx <= getX() + 47 && my >= getY() + 14 && my <= getY() + 25) {
+                NetworkHandler.INSTANCE.sendToServer(new RespondInvitationPacket(team.getName(), false));
+                return true;
+            }
+
+            // V — принять
+            if (mx >= getX() + 60 && mx <= getX() + 71 && my >= getY() + 14 && my <= getY() + 25) {
+                NetworkHandler.INSTANCE.sendToServer(new RespondInvitationPacket(team.getName(), true));
+                return true;
+            }
+
+            return false;
+        }
+
+        @Override
+        protected void updateWidgetNarration(NarrationElementOutput output) {}
     }
 }
