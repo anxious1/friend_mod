@@ -281,20 +281,25 @@ public class CreatingTeamScreen extends Screen {
                 showCompass
         ));
 
-        // ← ВОТ ЭТО — КЛЮЧЕВАЯ СТРОКА!
-        // Сразу открываем профиль новой команды
+        // Закрываем экран создания
+        minecraft.setScreen(parent);
+
+        // Ждём один тик, чтобы sync-пакет пришёл и обновил clientTeams
         Minecraft.getInstance().execute(() -> {
-            Minecraft mc = Minecraft.getInstance();
-            mc.setScreen(new TeamProfileOwner(
-                    null,
-                    mc.player.getInventory(),
-                    Component.literal(teamName),
-                    teamName,
-                    tag,
-                    true, // ты — владелец
-                    showTag,
-                    friendlyFire
-            ));
+            // Теперь открываем профиль команды как владельцу
+            TeamManager.Team team = TeamManager.clientTeams.get(teamName);
+            if (team != null) {
+                minecraft.setScreen(new TeamProfileOwner(
+                        null,
+                        minecraft.player.getInventory(),
+                        Component.literal(teamName),
+                        teamName,
+                        team.getTag(),
+                        team.showTag(),
+                        team.showCompass(),
+                        team.isFriendlyFire()
+                ));
+            }
         });
     }
 

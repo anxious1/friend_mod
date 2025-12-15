@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mom.teammod.packets.JoinTeamPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ImageButton;
@@ -26,7 +27,7 @@ public class OtherTeamProfileScreen extends Screen {
     private static final int TAG_V      = 207;
     private static final int TAG_W      = 28;
     private static final int TAG_H      = 10;
-
+    private Button joinButton = null; // Кнопка Join или прозрачная область
     private static final int COMPASS_U  = 1;   // compass
     private static final int COMPASS_V  = 231;
     private static final int COMPASS_W  = 15;
@@ -221,7 +222,6 @@ public class OtherTeamProfileScreen extends Screen {
         int guiY = top();
 
         addJoinTeamButton(guiX + (67-7+9) + OFFSET_X/4, guiY + 105+1 + OFFSET_Y/4, 56, 11);
-        addEmptyHintArea(guiX + 118 - 72 - 6 - 9 +4 + OFFSET_X/4 - 2, guiY + 90 - 42 - 20 +4 + OFFSET_Y/4 - 1, 9, 9);
         createPlayerButtons(guiX, guiY);
     }
 
@@ -329,54 +329,62 @@ public class OtherTeamProfileScreen extends Screen {
     }
 
     private void addJoinTeamButton(int x, int y, int w, int h) {
-        addRenderableWidget(new Button(x, y, JOIN_TEAM_W, JOIN_TEAM_H, Component.empty(), b -> {
-            // Открываем TeamMemberScreen при нажатии
-            minecraft.setScreen(new TeamMemberScreen(
-                    OtherTeamProfileScreen.this, // parent screen
-                    teamName,
-                    teamTag,
-                    showTag,
-                    showCompass,
-                    friendlyFire,
-                    teamLeader
-            ));
+        // Удаляем старую кнопку
+        if (joinButton != null) {
+            removeWidget(joinButton);
+            joinButton = null;
+        }
+
+        TeamManager.Team team = TeamManager.clientTeams.get(teamName);
+        if (team == null) return;
+
+        joinButton = new Button(x, y, JOIN_TEAM_W, JOIN_TEAM_H, Component.empty(), b -> {
+            if (!team.isInviteOnly()) {
+                NetworkHandler.INSTANCE.sendToServer(new JoinTeamPacket(teamName));
+            }
         }, s -> Component.empty()) {
             {
-                setTooltip(Tooltip.create(Component.literal("Подать заявку на вступление в команду")));
+                if (team.isInviteOnly()) {
+                    setTooltip(Tooltip.create(Component.literal(
+                            "§cКоманда закрыта\nВступить можно только по приглашению лидера")));
+                } else {
+                    setTooltip(Tooltip.create(Component.literal("Вступить в команду")));
+                }
             }
 
             @Override
             public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                // Рисуем текстуру join_team
-                RenderSystem.setShaderTexture(0, ATLAS);
-                g.blit(ATLAS, getX() + 2, getY() - 1, JOIN_TEAM_U, JOIN_TEAM_V, JOIN_TEAM_W, JOIN_TEAM_H, 256, 256);
+                if (team.isInviteOnly()) {
+                    // Полностью прозрачно
+                    return;
+                }
 
-                // Подсветка при наведении (теперь точно по размерам текстуры)
+                RenderSystem.setShaderTexture(0, ATLAS);
+                g.blit(ATLAS, getX(), getY(), JOIN_TEAM_U, JOIN_TEAM_V, JOIN_TEAM_W, JOIN_TEAM_H, 256, 256);
+
                 if (isHovered()) {
-                    g.fill(getX(), getY() - 1, getX() + 2 + JOIN_TEAM_W, getY() + JOIN_TEAM_H, 0x30FFFFFF);
+                    g.fill(getX(), getY(), getX() + JOIN_TEAM_W, getY() + JOIN_TEAM_H, 0x30FFFFFF);
                 }
             }
-        });
+        };
+
+        addRenderableWidget(joinButton);
     }
 
-    private void addEmptyHintArea(int x, int y, int w, int h) {
-        addRenderableWidget(new Button(x, y, w, h, Component.empty(), b -> {
-            // Пустая область - ничего не делает при клике
-        }, s -> Component.empty()) {
-            {
-                setTooltip(Tooltip.create(Component.literal(
-                        "Доступ в команду:\n§aВкл§r — только по приглашению\n§cВыкл§r — свободный доступ")));
-            }
 
-            @Override
-            public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                // Не рисуем никакой текстуры - просто пустая область
-                // Подсветка при наведении
-                if (isHovered()) {
-                    g.fill(getX(), getY(), getX() + width, getY() + height, 0x30FFFFFF);
-                }
-            }
-        });
+    public void refreshFromSync() {
+        int guiX = left();
+        int guiY = top();
+
+        // Перестраиваем кнопку Join
+        addJoinTeamButton(guiX + (67-7+9) + OFFSET_X/4, guiY + 105+1 + OFFSET_Y/4, 56, 11);
+
+        // Перестраиваем список участников
+        createPlayerButtons(guiX, guiY);
+
+        // Сбрасываем скролл
+        scrollOffset = 0;
+        updateVisibleButtons();
     }
 
     private void openPlayersList() {

@@ -184,7 +184,7 @@ public class MyProfileScreen extends Screen {
     private void openDetailedStats() {
         ClientState.hidePlayerRender = true;
 
-        StatisticsScreen statsScreen = new StatisticsScreen(Component.literal("Подробная статистика")) {
+        StatisticsScreen statsScreen = new StatisticsScreen(Component.literal("Подробная статистика"),minecraft.player.getUUID()) {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
                 // 1. Рисуем затемнение ВСЕГО ЭКРАНА

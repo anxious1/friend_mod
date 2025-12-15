@@ -27,6 +27,7 @@ public class TeamMemberScreen extends Screen {
     private static final int TAG_W      = 28;
     private static final int TAG_H      = 10;
     private Screen parentScreen;
+    private Button leaveButton = null;
     private static final int COMPASS_U  = 1;   // compass
     private static final int COMPASS_V  = 231;
     private static final int COMPASS_W  = 15;
@@ -71,9 +72,7 @@ public class TeamMemberScreen extends Screen {
     // Данные команды
     private final String teamName;
     private final String teamTag;
-    private final boolean showTag;
-    private final boolean showCompass;
-    private final boolean friendlyFire;
+
     private final UUID teamLeader;
 
     private static final int XP_BAR_U = 0;
@@ -87,9 +86,6 @@ public class TeamMemberScreen extends Screen {
         super(Component.literal(teamName));
         this.teamName = teamName;
         this.teamTag = teamTag;
-        this.showTag = showTag;
-        this.showCompass = showCompass;
-        this.friendlyFire = friendlyFire;
         this.teamLeader = teamLeader;
         this.parentScreen = null;
     }
@@ -293,7 +289,10 @@ public class TeamMemberScreen extends Screen {
                     g.blit(skin, headX, headY, 8, 8, 40, 8, 8, 8, 64, 64);
                     RenderSystem.disableBlend();
 
-                    String tagPart = (showTag && teamTag != null && !teamTag.isEmpty()) ? "[" + teamTag + "]" : "";
+                    TeamManager.Team currentTeam = TeamManager.clientTeams.get(teamName);
+                    String tagPart = (currentTeam != null && currentTeam.showTag() && currentTeam.getTag() != null && !currentTeam.getTag().isEmpty())
+                            ? "[" + currentTeam.getTag() + "]"
+                            : "";
                     String fullText = finalName + tagPart;
                     if (font.width(fullText) > ONLINE_W - 22) {
                         fullText = font.plainSubstrByWidth(fullText, ONLINE_W - 25) + "..";
@@ -336,10 +335,14 @@ public class TeamMemberScreen extends Screen {
     }
 
     private void addLeaveTeamButton(int x, int y, int w, int h) {
-        addRenderableWidget(new Button(x, y, w, h, Component.empty(), b -> {
-            // Открываем окно подтверждения выхода
+        if (leaveButton != null) {
+            removeWidget(leaveButton);
+        }
+
+        leaveButton = new Button(x, y, w, h, Component.empty(), b -> {
+            // Открываем окно подтверждения выхода — функционал сохранён полностью
             minecraft.setScreen(new LeaveTeamScreen(
-                    TeamMemberScreen.this, // ← ВАЖНО: this, а не null
+                    TeamMemberScreen.this,
                     teamName,
                     teamTag
             ));
@@ -350,12 +353,13 @@ public class TeamMemberScreen extends Screen {
 
             @Override
             public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                // Прозрачная кнопка без текстуры
                 if (isHovered()) {
                     g.fill(getX(), getY(), getX() + width, getY() + height, 0x30FFFFFF);
                 }
             }
-        });
+        };
+
+        addRenderableWidget(leaveButton);
     }
 
     private void addEmptyHintArea(int x, int y, int w, int h) {
@@ -430,27 +434,31 @@ public class TeamMemberScreen extends Screen {
         // 3. ТЕКСТ КОМАНДЫ
         g.drawCenteredString(font, teamName, guiX + 19 + OFFSET_X/4 - 2, guiY + OFFSET_Y/4 - 2, 0xFFFFFF);
 
-        // 4. ТЕГ КОМАНДЫ
-        if (teamTag != null && !teamTag.isEmpty() && showTag) {
-            g.drawCenteredString(font, teamTag, guiX + 19 + OFFSET_X/4 - 2, guiY + 26 + OFFSET_Y/4 - 15, 0xFFFFFF);
+        // 4. ТЕГ КОМАНДЫ — актуальные данные
+        TeamManager.Team currentTeam = TeamManager.clientTeams.get(teamName);
+        if (currentTeam != null && currentTeam.showTag() && !currentTeam.getTag().isEmpty()) {
+            g.drawCenteredString(font, currentTeam.getTag(), guiX + 19 + OFFSET_X/4 - 2, guiY + 26 + OFFSET_Y/4 - 15, 0xFFFFFF);
         }
 
         // 5. ОНЛАЙН/ВСЕГО
         int[] stats = getOnlineAndTotalPlayers();
         g.drawCenteredString(font, stats[0] + "/" + stats[1], guiX + 118 + OFFSET_X/4 - 2, guiY + 13 + OFFSET_Y/4 + 2, 0xFFFFFF);
 
-        // 6. ИКОНКИ НАСТРОЕК
-        if (showTag) {
-            g.blit(ATLAS, guiX + 118 - 14 + OFFSET_X/4 - 2, guiY + 34 + OFFSET_Y/4 - 1,
-                    TAG_U, TAG_V, TAG_W, TAG_H, 256, 256);
-        }
-        if (showCompass) {
-            g.blit(ATLAS, guiX + 118 - 7 + OFFSET_X/4 - 2, guiY + 51 + OFFSET_Y/4 - 1,
-                    COMPASS_U, COMPASS_V, COMPASS_W, COMPASS_H, 256, 256);
-        }
-        if (friendlyFire) {
-            g.blit(ATLAS, guiX + 118 - 6 + OFFSET_X/4 - 2, guiY + 72 + OFFSET_Y/4 - 1,
-                    FFON_U, FFON_V, FFON_W, FFON_H, 256, 256);
+        // 6. ИКОНКИ НАСТРОЕК — берём актуальные данные
+        TeamManager.Team actualTeam = TeamManager.clientTeams.get(teamName);
+        if (actualTeam != null) {
+            if (actualTeam.showTag()) {
+                g.blit(ATLAS, guiX + 118 - 14 + OFFSET_X/4 - 2, guiY + 34 + OFFSET_Y/4 - 1,
+                        TAG_U, TAG_V, TAG_W, TAG_H, 256, 256);
+            }
+            if (actualTeam.showCompass()) {
+                g.blit(ATLAS, guiX + 118 - 7 + OFFSET_X/4 - 2, guiY + 51 + OFFSET_Y/4 - 1,
+                        COMPASS_U, COMPASS_V, COMPASS_W, COMPASS_H, 256, 256);
+            }
+            if (actualTeam.isFriendlyFire()) {
+                g.blit(ATLAS, guiX + 118 - 6 + OFFSET_X/4 - 2, guiY + 72 + OFFSET_Y/4 - 1,
+                        FFON_U, FFON_V, FFON_W, FFON_H, 256, 256);
+            }
         }
 
         // 7. ПОЛЗУНОК
@@ -565,5 +573,19 @@ public class TeamMemberScreen extends Screen {
     public void onClose() {
         // Просто закрываем экран, не возвращаемся к родителю
         minecraft.setScreen(null);
+    }
+
+    public void refreshFromSync() {
+        int guiX = left();
+        int guiY = top();
+
+        // Перестраиваем кнопку выхода
+        addLeaveTeamButton(guiX - 4 + (67-7+9) + OFFSET_X/4, guiY - 2 + 105+1 + OFFSET_Y/4, LEAVE_TEAM_W, LEAVE_TEAM_H);
+
+        // Перестраиваем список участников
+        createPlayerButtons(guiX, guiY);
+
+        scrollOffset = 0;
+        updateVisibleButtons();
     }
 }

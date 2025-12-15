@@ -1,5 +1,7 @@
 package com.mom.teammod;
 
+import com.electronwill.nightconfig.core.conversion.ConversionTable;
+import com.mom.teammod.packets.StatsSyncPacket;
 import com.mom.teammod.packets.TeamSyncPacket;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -31,10 +33,12 @@ public class TeamManager {
     public static final Map<UUID, Set<String>> clientPlayerTeams = new HashMap<>();
     public static final Map<String, Team> clientTeams = new HashMap<>();
     private static final int MAX_TEAMS_PER_PLAYER = 3;
-
+    private static final Map<UUID, PlayerStatsData> serverPlayerStats = new HashMap<>();
+    public static final Map<UUID, PlayerStatsData> clientPlayerStats = new HashMap<>();
 
     public static class Team implements INBTSerializable<CompoundTag> {
         private final String name;
+        private boolean inviteOnly = true;
         private UUID owner;
         private final Set<UUID> members = new HashSet<>();
         private final Set<UUID> invited = new HashSet<>();
@@ -42,7 +46,6 @@ public class TeamManager {
         private String tag = "";
         private int nameColor = 0xFFFFFF;
         private int tagColor = 0xFFFFFF;
-
         // ← ТВОИ НОВЫЕ ПОЛЯ (теперь приватные + с геттерами/сеттерами)
         private boolean showTag = true;
         private boolean showCompass = true;
@@ -70,6 +73,9 @@ public class TeamManager {
 
         public int getTagColor() { return tagColor; }
         public void setTagColor(int color) { this.tagColor = color; }
+
+        public boolean isInviteOnly() { return inviteOnly; }
+        public void setInviteOnly(boolean inviteOnly) { this.inviteOnly = inviteOnly; }
 
         // ← ГЕТТЕРЫ И СЕТТЕРЫ ДЛЯ НОВЫХ ПОЛЕЙ
         public boolean showTag() { return showTag; }
@@ -107,6 +113,7 @@ public class TeamManager {
             tag.putString("tag", this.tag);
             tag.putInt("nameColor", nameColor);
             tag.putInt("tagColor", tagColor);
+            tag.putBoolean("inviteOnly", inviteOnly);
 
             // ← СОХРАНЯЕМ НОВЫЕ ПОЛЯ
             tag.putBoolean("showTag", showTag);
@@ -130,6 +137,7 @@ public class TeamManager {
             this.tag = tag.getString("tag");
             nameColor = tag.getInt("nameColor");
             tagColor = tag.getInt("tagColor");
+            inviteOnly = tag.contains("inviteOnly") ? tag.getBoolean("inviteOnly") : true;
 
             // ← ЧИТАЕМ НОВЫЕ ПОЛЯ (с дефолтами на случай старых команд)
             showTag = tag.contains("showTag") ? tag.getBoolean("showTag") : true;
@@ -375,6 +383,7 @@ public class TeamManager {
             return false;
         }
 
+        // Убираем игрока из команды
         team.removeMember(targetUUID);
         playerTeams.computeIfAbsent(targetUUID, k -> new HashSet<>()).remove(teamName);
 
@@ -389,16 +398,23 @@ public class TeamManager {
             kicker.sendSystemMessage(Component.literal("§aВы исключили игрока из команды §f" + teamName));
         }
 
+        // Если остался только один участник — он становится владельцем (на всякий случай)
         if (team.getMembers().size() == 1) {
             team.owner = team.getMembers().iterator().next();
         }
 
+        // Команда удаляется ТОЛЬКО если в ней не осталось участников
         if (team.getMembers().isEmpty()) {
             teams.remove(teamName);
         }
 
         data.setDirty(true);
+
+        // Синхронизация: отправляем обновлённое состояние команды ВСЕМ
+        // Если команда осталась — все видят её без кикнутого игрока
+        // Если команда удалена — всем приходит пакет на удаление
         syncTeamToAll(teamName);
+
         return true;
     }
 
@@ -608,6 +624,28 @@ public class TeamManager {
         }
     }
 
+    @SubscribeEvent
+    public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            // Создаём профиль сразу
+            ProfileManager.getProfile(player.getUUID());
+
+            // Синхронизируем обычный профиль (background и т.д.)
+            ProfileManager.syncProfileToClient(player);
+
+            // Синхронизируем статистику — НО ОТКЛАДЫВАЕМ на 1 тик, когда handshake точно завершён
+            player.server.submitAsync(() -> {
+                PlayerStatsData stats = new PlayerStatsData(player.getStats());
+                TeamManager.serverPlayerStats.put(player.getUUID(), stats);
+
+                // Отправляем статистику ТОЛЬКО этому игроку
+                NetworkHandler.INSTANCE.send(
+                        PacketDistributor.PLAYER.with(() -> player),
+                        new StatsSyncPacket(player.getUUID(), stats)
+                );
+            });
+        }
+    }
     @SubscribeEvent
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {

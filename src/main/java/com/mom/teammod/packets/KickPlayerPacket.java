@@ -36,16 +36,10 @@ public class KickPlayerPacket {
             UUID kickerUUID = ctx.get().getSender().getUUID();
 
             if (TeamManager.kickPlayer(pkt.teamName, pkt.playerUUID, kickerUUID)) {
-                // Отправляем ВСЕМ (включая выгнанного)
-                TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName);
-                MinecraftServer server = ctx.get().getSender().getServer();
-                if (server != null) {
-                    server.getPlayerList().getPlayers().forEach(p ->
-                            NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> p), syncPacket)
-                    );
-                }
+                // Синхронизация уже происходит внутри kickPlayer через syncTeamToAll
+                // Ничего дополнительно отправлять не нужно
 
-                // Если это ТЫ был выгнан — кидаем в TeamScreen
+                // Если выгнали текущего игрока — возвращаемся в TeamScreen
                 if (pkt.playerUUID.equals(Minecraft.getInstance().player.getUUID())) {
                     Minecraft.getInstance().execute(() -> TeamScreen.returnToTeamScreen());
                 }

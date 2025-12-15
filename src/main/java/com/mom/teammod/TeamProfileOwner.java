@@ -2,6 +2,7 @@ package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mom.teammod.packets.DeleteTeamPacket;
+import com.mom.teammod.packets.SetInviteOnlyPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
@@ -226,26 +227,29 @@ public class TeamProfileOwner extends Screen {
 
     private void addToggleLockButton(int x, int y, int w, int h) {
         addRenderableWidget(new Button(x, y, w, h, Component.empty(), b -> {
-            inviteOnly = !inviteOnly;
-            // TODO: потом подключишь пакет SetInviteOnlyPacket
+            TeamManager.Team team = TeamManager.clientTeams.get(teamName);
+            if (team != null && team.getOwner().equals(minecraft.player.getUUID())) {
+                boolean newState = !team.isInviteOnly();
+                team.setInviteOnly(newState); // локально
+                NetworkHandler.INSTANCE.sendToServer(new SetInviteOnlyPacket(teamName, newState));
+            }
         }, s -> Component.empty()) {
             {
                 setTooltip(Tooltip.create(Component.literal(
-                        "Доступ в команду:\n§aВкл§r — только по приглашению\n§cВыкл§r — свободный доступ")));
+                        "Режим вступления:\n§aОткрытая§r — любой может вступить\n§cПриглашения§r — только по приглашению")));
             }
 
             @Override
             public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                TeamManager.Team team = TeamManager.clientTeams.get(teamName);
+                if (team != null && team.isInviteOnly()) {
+                    RenderSystem.setShaderTexture(0, ATLAS);
+                    g.blit(ATLAS, getX(), getY(), ZAMOK_U, ZAMOK_V, ZAMOK_W, ZAMOK_H, 256, 256);
+                }
+                // если открытая — ничего не рисуем
                 if (isHovered()) {
                     g.fill(getX(), getY(), getX() + width, getY() + height, 0x30FFFFFF);
                 }
-
-                if (inviteOnly) {
-                    RenderSystem.setShaderTexture(0, ATLAS);
-                    // Рисуем текстуру точно в границах кнопки, без смещения
-                    g.blit(ATLAS, getX(), getY(), ZAMOK_U, ZAMOK_V, ZAMOK_W, ZAMOK_H, 256, 256);
-                }
-                // если выключен — ничего не рисуется
             }
         });
     }
@@ -408,5 +412,17 @@ public class TeamProfileOwner extends Screen {
                 button.visible = false;
             }
         }
+    }
+
+    public void refreshFromSync() {
+        int guiX = left();
+        int guiY = top();
+
+        // Перестраиваем список участников
+        // (кнопки кика/передачи остаются — они не меняются от настроек)
+        // Если есть метод createPlayerButtons — вызови его, иначе просто updateVisibleButtons
+        // В твоём коде он есть — просто перестраиваем
+        // Но чтобы не дублировать код — просто обновляем видимость
+        updateVisibleButtons();
     }
 }

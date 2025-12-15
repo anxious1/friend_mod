@@ -2,6 +2,7 @@ package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mom.teammod.packets.InvitePlayerPacket;
+import com.mom.teammod.packets.RequestProfilePacket;
 import com.mom.teammod.packets.RespondInvitationPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -15,6 +16,7 @@ import net.minecraft.world.entity.player.Player;
 import java.util.Comparator;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class OtherPlayerProfileScreen extends Screen {
 
@@ -26,7 +28,8 @@ public class OtherPlayerProfileScreen extends Screen {
     private static final int INVITE_OFF_H = 15;   // ybr(185.31) - ytl(170.71) = 14.6 ≈ 15
     private static final int INVITE_OFF_U = (int)30.76;   // xtl
     private static final int INVITE_OFF_V = (int)170.71;  // ytl
-
+    private static final long AFK_THRESHOLD = 10_000L; // 10 секунд без ввода = AFK
+    private final AtomicLong lastInputTime = new AtomicLong(System.currentTimeMillis());
     private static final int ACCEPT_JOIN_W = 114;  // xbr(244.36) - xtl(130.56) = 113.8 ≈ 114
     private static final int ACCEPT_JOIN_H = 16;   // ybr(200.91) - ytl(185.41) = 15.5 ≈ 16
     private static final int ACCEPT_JOIN_U = (int)130.56;  // xtl
@@ -244,35 +247,35 @@ public class OtherPlayerProfileScreen extends Screen {
     private void openDetailedStats() {
         ClientState.hidePlayerRender = true;
 
-        StatisticsScreen statsScreen = new StatisticsScreen(Component.literal("Подробная статистика")) {
+        // === ЗАПРАШИВАЕМ ПРОФИЛЬ ЦЕЛЕВОГО ИГРОКА С СЕРВЕРА ===
+        NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(targetPlayerId));
+
+        StatisticsScreen statsScreen = new StatisticsScreen(Component.literal("Подробная статистика"), targetPlayerId) {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
-                // 1. Рисуем затемнение ВСЕГО ЭКРАНА
-                g.fill(0, 0, width, height, 0xB3000000); // ← ЗДЕСЬ!
+                // Затемнение всего экрана
+                g.fill(0, 0, width, height, 0xB3000000);
 
-                // 2. Рисуем текстуру фона GUI поверх затемнения
+                // Фон профиля (как в твоём экране)
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - GUI_WIDTH) / 2;
                 int guiY = (height - GUI_HEIGHT) / 2;
                 g.blit(ATLAS, guiX, guiY, 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
 
-                // 3. Рисуем текстуры кнопок (если есть)
+                // Рисуем кнопки invite/accept если нужно (как в родительском экране)
                 InviteButtonState buttonState = getInviteButtonState();
                 if (buttonState == InviteButtonState.INVITE_OFF) {
                     int inviteX = guiX + (GUI_WIDTH - INVITE_OFF_W) / 2 - 23;
                     int inviteY = guiY + GUI_HEIGHT - INVITE_OFF_H - 16;
-                    g.blit(ATLAS, inviteX, inviteY, INVITE_OFF_U, INVITE_OFF_V,
-                            INVITE_OFF_W, INVITE_OFF_H, 256, 256);
-                }
-                else if (buttonState == InviteButtonState.ACCEPT_JOIN) {
+                    g.blit(ATLAS, inviteX, inviteY, INVITE_OFF_U, INVITE_OFF_V, INVITE_OFF_W, INVITE_OFF_H, 256, 256);
+                } else if (buttonState == InviteButtonState.ACCEPT_JOIN) {
                     int acceptX = guiX + (GUI_WIDTH - ACCEPT_JOIN_W) / 2 - 23;
                     int acceptY = guiY + GUI_HEIGHT - ACCEPT_JOIN_H - 26;
-                    g.blit(ATLAS, acceptX, acceptY, ACCEPT_JOIN_U, ACCEPT_JOIN_V,
-                            ACCEPT_JOIN_W, ACCEPT_JOIN_H, 256, 256);
+                    g.blit(ATLAS, acceptX, acceptY, ACCEPT_JOIN_U, ACCEPT_JOIN_V, ACCEPT_JOIN_W, ACCEPT_JOIN_H, 256, 256);
                 }
 
-                // 4. Теперь рисуем окно статистики поверх всего
-                super.render(g, mx, my, pt); // ← Оно рисует СВОЕ окно БЕЗ затемнения
+                // Рисуем само окно статистики
+                super.render(g, mx, my, pt);
             }
 
             @Override
@@ -347,19 +350,26 @@ public class OtherPlayerProfileScreen extends Screen {
     }
 
     private void renderStatusIcon(GuiGraphics g) {
+        // Определяем статус игрока
+        Player targetPlayer = minecraft.level.getPlayerByUUID(targetPlayerId);
+        boolean isOnline = targetPlayer != null;
+
         int u;
-        if (!playerStatus.online) {
+        if (!isOnline) {
             u = OFFLINE_U; // Оффлайн
-        } else if (playerStatus.afk) {
-            u = AFK_U; // AFK
         } else {
-            u = ONLINE_U; // Онлайн
+            // Если онлайн — проверяем AFK по последнему вводу (как в MyProfileScreen)
+            long timeSinceLastInput = System.currentTimeMillis() - lastInputTime.get();
+            boolean isAfk = timeSinceLastInput >= AFK_THRESHOLD;
+            u = isAfk ? AFK_U : ONLINE_U;
         }
 
+        // Позиции — точно те же, что в MyProfileScreen (не меняем ни пикселя!)
         int baseX = (width - GUI_WIDTH) / 2;
         int baseY = (height - GUI_HEIGHT) / 2;
         int drawX = baseX + 88 - 2 + 1 - 2;
         int drawY = baseY + 38 - 3 + 5 - 2;
+
         g.blit(ATLAS, drawX, drawY, u, ONLINE_V, 5, 5, 256, 256);
     }
 
@@ -630,5 +640,23 @@ public class OtherPlayerProfileScreen extends Screen {
     public void onClose() {
         ClientState.hidePlayerRender = false; // Сбрасываем флаг
         minecraft.setScreen(parentScreen);
+    }
+
+    @Override
+    public boolean keyPressed(int key, int scan, int mod) {
+        lastInputTime.set(System.currentTimeMillis());
+        return super.keyPressed(key, scan, mod);
+    }
+
+    @Override
+    public boolean charTyped(char c, int mod) {
+        lastInputTime.set(System.currentTimeMillis());
+        return super.charTyped(c, mod);
+    }
+
+    @Override
+    public void mouseMoved(double mx, double my) {
+        lastInputTime.set(System.currentTimeMillis());
+        super.mouseMoved(mx, my);
     }
 }

@@ -363,4 +363,8 @@ public class CustomizationScreen extends Screen {
 
         super.render(g, mouseX, mouseY, partialTick);
     }
+
+    public void refreshFromSync() {
+        // Настройки уже обновлены в team — render сам возьмёт актуальные
+    }
 }

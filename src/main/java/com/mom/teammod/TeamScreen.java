@@ -312,20 +312,9 @@ public class TeamScreen extends Screen {
     }
 
     private void openTeamProfile(String teamName) {
-        // TODO: Получить реальные настройки из TeamManager
         TeamManager.Team team = TeamManager.getTeam(teamName);
-        if (team != null) {
-            minecraft.setScreen(new TeamProfileOwner(
-                    null,
-                    playerInventory,
-                    Component.literal(teamName),
-                    teamName,
-                    team.getTag(),
-                    true, // временно
-                    true, // временно
-                    team.isFriendlyFire()
-            ));
-        } else {
+        if (team == null) {
+            // fallback на старый экран (на случай ошибки)
             minecraft.setScreen(new TeamProfileOwner(
                     null,
                     playerInventory,
@@ -335,6 +324,35 @@ public class TeamScreen extends Screen {
                     true,
                     true,
                     true
+            ));
+            return;
+        }
+
+        UUID playerUUID = minecraft.player.getUUID();
+        boolean isOwner = team.getOwner().equals(playerUUID);
+
+        if (isOwner) {
+            // Владелец — открываем полный экран с кастомизацией
+            minecraft.setScreen(new TeamProfileOwner(
+                    null,
+                    playerInventory,
+                    Component.literal(teamName),
+                    teamName,
+                    team.getTag(),
+                    team.showTag(),
+                    team.showCompass(),
+                    team.isFriendlyFire()
+            ));
+        } else {
+            // Обычный участник — открываем упрощённый экран без настроек
+            minecraft.setScreen(new TeamMemberScreen(
+                    TeamScreen.this, // parent
+                    teamName,
+                    team.getTag(),
+                    team.showTag(),
+                    team.showCompass(),
+                    team.isFriendlyFire(),
+                    team.getOwner()
             ));
         }
     }

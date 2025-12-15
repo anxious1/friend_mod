@@ -13,7 +13,11 @@ public class TeamWorldData extends SavedData {
 
     private final Map<String, TeamManager.Team> teams = new HashMap<>();
     private final Map<UUID, Set<String>> playerTeams = new HashMap<>();
+    private final Map<UUID, ProfileManager.Profile> playerProfiles = new HashMap<>();
 
+    public Map<UUID, ProfileManager.Profile> getPlayerProfiles() {
+        return playerProfiles;
+    }
     private static final String DATA_NAME = TeamMod.MODID + "_teams";
 
     public TeamWorldData() {
@@ -26,12 +30,12 @@ public class TeamWorldData extends SavedData {
     private void load(CompoundTag nbt) {
         teams.clear();
         playerTeams.clear();
+        playerProfiles.clear(); // очищаем профили
 
         ListTag teamsList = nbt.getList("teams", 10);
         for (int i = 0; i < teamsList.size(); i++) {
             CompoundTag teamTag = teamsList.getCompound(i);
 
-            // ВАЖНО: сначала читаем имя из NBT, потом создаём объект
             String teamName = teamTag.getString("name");
             if (teamName.isEmpty()) {
                 System.out.println("[TeamWorldData] Пропуск команды без имени в NBT!");
@@ -39,7 +43,7 @@ public class TeamWorldData extends SavedData {
             }
 
             TeamManager.Team team = new TeamManager.Team(teamName, null);
-            team.deserializeNBT(teamTag); // ← теперь имя уже есть, всё остальное заполнится
+            team.deserializeNBT(teamTag);
             teams.put(teamName, team);
         }
 
@@ -53,6 +57,22 @@ public class TeamWorldData extends SavedData {
                 set.add(teamNames.getString(j));
             }
             playerTeams.put(player, set);
+        }
+
+        // НОВОЕ: Загрузка профилей игроков
+        if (nbt.contains("playerProfiles")) {
+            CompoundTag profilesTag = nbt.getCompound("playerProfiles");
+            for (String uuidStr : profilesTag.getAllKeys()) {
+                try {
+                    UUID uuid = UUID.fromString(uuidStr);
+                    ProfileManager.Profile profile = new ProfileManager.Profile(uuid);
+                    profile.deserializeNBT(profilesTag.getCompound(uuidStr));
+                    playerProfiles.put(uuid, profile);
+                } catch (Exception e) {
+                    System.out.println("[TeamWorldData] Ошибка загрузки профиля для UUID: " + uuidStr);
+                    e.printStackTrace();
+                }
+            }
         }
 
         System.out.println("[TeamWorldData] Загружено команд: " + teams.size());
@@ -79,6 +99,13 @@ public class TeamWorldData extends SavedData {
         }
         nbt.put("playerTeams", playerList);
 
+        // НОВОЕ: Сохранение профилей игроков
+        CompoundTag profilesTag = new CompoundTag();
+        for (Map.Entry<UUID, ProfileManager.Profile> entry : playerProfiles.entrySet()) {
+            profilesTag.put(entry.getKey().toString(), entry.getValue().serializeNBT());
+        }
+        nbt.put("playerProfiles", profilesTag);
+
         return nbt;
     }
 
@@ -95,14 +122,20 @@ public class TeamWorldData extends SavedData {
 
         DimensionDataStorage storage = level.getDataStorage();
 
+        // ПРАВИЛЬНО: первый — пустой конструктор, второй — фабрика загрузки из NBT
         TeamWorldData data = storage.computeIfAbsent(
-                TeamWorldData::new,     // новый объект
-                TeamWorldData::new,     // загрузка из NBT
-                DATA_NAME               // имя файла
+                TeamWorldData::loadFromNBT,  // фабрика, которая принимает NBT и возвращает объект
+                TeamWorldData::new,          // пустой объект
+                DATA_NAME
         );
 
-        System.out.println("[TeamWorldData] data получен: " + (data != null ? "OK (teams=" + data.getTeams().size() + ")" : "NULL!"));
+        System.out.println("[TeamWorldData] data получен: " + (data != null ? "OK (teams=" + data.getTeams().size() + ", profiles=" + data.getPlayerProfiles().size() + ")" : "NULL!"));
 
+        return data;
+    }
+    private static TeamWorldData loadFromNBT(CompoundTag nbt) {
+        TeamWorldData data = new TeamWorldData();
+        data.load(nbt);
         return data;
     }
 }

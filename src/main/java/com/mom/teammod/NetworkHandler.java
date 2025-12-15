@@ -3,10 +3,12 @@ package com.mom.teammod;
 import com.mom.teammod.packets.*;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraftforge.network.NetworkDirection;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.NetworkRegistry;
 import net.minecraftforge.network.simple.SimpleChannel;
 
+import java.util.Optional;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
@@ -23,6 +25,11 @@ public class NetworkHandler {
     private static int id = 0;
 
     public static void register() {
+        INSTANCE.registerMessage(id++, RequestProfilePacket.class, RequestProfilePacket::encode, RequestProfilePacket::decode, RequestProfilePacket::handle, Optional.of(NetworkDirection.PLAY_TO_SERVER));
+        registerMessage(StatsSyncPacket.class, StatsSyncPacket::encode, StatsSyncPacket::decode, StatsSyncPacket::handle);
+        registerMessage(OpenTeamMemberScreenPacket.class, OpenTeamMemberScreenPacket::encode, OpenTeamMemberScreenPacket::decode, OpenTeamMemberScreenPacket::handle);
+        registerMessage(SetInviteOnlyPacket.class, SetInviteOnlyPacket::encode, SetInviteOnlyPacket::decode, SetInviteOnlyPacket::handle);
+        registerMessage(JoinTeamPacket.class, JoinTeamPacket::encode, JoinTeamPacket::decode, JoinTeamPacket::handle);
         registerMessage(CreateTeamPacket.class, CreateTeamPacket::encode, CreateTeamPacket::decode, CreateTeamPacket::handle);
         registerMessage(InvitePlayerPacket.class, InvitePlayerPacket::encode, InvitePlayerPacket::decode, InvitePlayerPacket::handle);
         registerMessage(AcceptInvitationPacket.class, AcceptInvitationPacket::encode, AcceptInvitationPacket::decode, AcceptInvitationPacket::handle);

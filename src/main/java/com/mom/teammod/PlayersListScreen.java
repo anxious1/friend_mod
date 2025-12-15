@@ -148,6 +148,10 @@ public class PlayersListScreen extends Screen {
 
         applySearchFilter(); // обновляем отображение
     }
+
+    public void refreshFromSync() {
+        refreshPlayerList();
+    }
     
 
     private void repositionSlots() {

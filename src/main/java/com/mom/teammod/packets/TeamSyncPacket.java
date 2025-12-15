@@ -1,8 +1,8 @@
 package com.mom.teammod.packets;
 
-import com.mom.teammod.TeamManager;
-import com.mom.teammod.TeamScreen;
+import com.mom.teammod.*;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.network.NetworkEvent;
@@ -53,7 +53,7 @@ public class TeamSyncPacket {
     public static void handle(TeamSyncPacket pkt, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             System.out.println("[Client] TeamSyncPacket получен! teamName = '" + pkt.teamName + "', hasData = " + (pkt.teamData != null));
-            // Этот код выполняется на клиенте
+
             if (pkt.teamName.isEmpty() && pkt.teamData == null) {
                 // Полная очистка всех команд
                 TeamManager.clientTeams.clear();
@@ -98,9 +98,30 @@ public class TeamSyncPacket {
     // Вынес обновление экрана в отдельный метод, чтобы не дублировать
     private static void refreshScreenIfOpen() {
         Minecraft.getInstance().execute(() -> {
-            if (Minecraft.getInstance().screen instanceof TeamScreen screen) {
-                screen.refreshLists();
-                System.out.println("[Client] TeamScreen обновлён после синхронизации");
+            Screen current = Minecraft.getInstance().screen;
+
+            if (current instanceof TeamScreen teamScreen) {
+                teamScreen.refreshLists();
+            }
+
+            if (current instanceof OtherTeamProfileScreen otherScreen) {
+                otherScreen.refreshFromSync();
+            }
+
+            if (current instanceof TeamProfileOwner ownerScreen) {
+                ownerScreen.refreshFromSync();
+            }
+
+            if (current instanceof TeamMemberScreen memberScreen) {
+                memberScreen.refreshFromSync();
+            }
+
+            if (current instanceof PlayersListScreen playersScreen) {
+                playersScreen.refreshFromSync();
+            }
+
+            if (current instanceof CustomizationScreen customScreen) {
+                customScreen.refreshFromSync();
             }
         });
     }
