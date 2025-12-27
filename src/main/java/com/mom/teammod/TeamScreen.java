@@ -286,11 +286,8 @@ public class TeamScreen extends Screen {
                 }
 
                 if (enabled[0]) {
-                    // Маленькая точка пимпа (вкл)
                     RenderSystem.setShaderTexture(0, ATLAS);
                     g.blit(ATLAS, getX() + 2, getY() + 2, PIMP_DOT_U, PIMP_DOT_V, PIMP_DOT_W, PIMP_DOT_H, 256, 256);
-
-                    // Иконка (компас или тег)
                     g.blit(ATLAS, buttonX - 44 + holderGuiX, buttonY - 147 + holderGuiY,
                             iconU, iconV, iconW, iconH, 256, 256);
                 }

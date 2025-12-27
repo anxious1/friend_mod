@@ -71,10 +71,19 @@ repositories {
             includeGroup "curse.maven"
         }
     }
+    flatDir {
+        dir 'libs'
+    }
 }
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    // mixin
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    implementation(annotationProcessor("io.github.llamalad7:mixinextras-common:0.3.2"))
+    implementation(jarJar("io.github.llamalad7:mixinextras-forge:0.3.2")) {
+        jarJar.ranged(it, "[0.3.2,)")
+    }
     implementation fg.deobf("curse.maven:lendercataclysm-551586:6906993")
     implementation fg.deobf("curse.maven:irons-spells-n-spellbooks-855414:6488484")
     implementation fg.deobf("curse.maven:curios-309927:6418456")
@@ -84,6 +93,42 @@ dependencies {
     implementation fg.deobf("curse.maven:bendy-lib-623373:4550371")
     implementation fg.deobf("curse.maven:lionfish-api-1001614:5922047")
     implementation fg.deobf("curse.maven:caelus-308989:5281700")
+    // curios
+    implementation fg.deobf("curse.maven:curios-309927:6418456")
+    // attribute fix
+    implementation fg.deobf("curse.maven:attributefix-280510:4648448")
+    // max health fix
+    implementation fg.deobf("curse.maven:max-health-fix-492246:4648479")
+    // dummy target
+    implementation fg.deobf("curse.maven:mmmmmmmmmmmm-225738:4602101")
+    implementation fg.deobf("curse.maven:selene-499980:4656567")
+    // farmer's delight
+    implementation fg.deobf("curse.maven:farmers-delight-398521:4679319")
+    // jei
+    implementation fg.deobf("curse.maven:jei-238222:4644453")
+    // apple skin
+    implementation fg.deobf("curse.maven:appleskin-248787:4605078")
+    // dave's potioneering
+    implementation fg.deobf("curse.maven:daves-potioneering-639653:4770409")
+    // item production lib
+    implementation fg.deobf("curse.maven:item-production-lib-950401:5097458")
+    // ftb
+    implementation fg.deobf("curse.maven:placebo-283644:6274231")
+    implementation fg.deobf("curse.maven:architectury-api-419699:5137938")
+    implementation fg.deobf("curse.maven:ftb-teams-forge-404468:5267190")
+    implementation fg.deobf("curse.maven:ftb-library-forge-404465:6807424")
+    implementation fg.deobf("curse.maven:ftb-quests-forge-289412:6829212")
+
+    implementation fg.deobf("curse.maven:cloth-config-348521:5729105")
+    implementation fg.deobf("curse.maven:playeranimator-658587:4587214")
+    implementation fg.deobf("curse.maven:combat-roll-678036:5625925")
+
+    implementation fg.deobf("curse.maven:caelus-308989:5281700")
+
+    implementation fg.deobf('passiveskilltree:PassiveSkillTree:1.0.0')  // имя файла: PassiveSkillTree-1.0.0.jar или PassiveSkillTree.jar
+    implementation fg.deobf('weightmod:weightmod:1.0.0')
+    implementation fg.deobf('ftbquests:ftb-quests:1.0.0')
+    implementation fg.deobf('raidportals:raidportals:1.0.0')
 }
 
 tasks.named('processResources', ProcessResources).configure {

@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.electronwill.nightconfig.core.conversion.ConversionTable;
+import com.mom.teammod.packets.AchievementNotificationPacket;
 import com.mom.teammod.packets.StatsSyncPacket;
 import com.mom.teammod.packets.TeamSyncPacket;
 import net.minecraft.nbt.CompoundTag;
@@ -196,6 +197,7 @@ public class TeamManager {
         data.setDirty(true);
 
         serverOwner.sendSystemMessage(Component.literal("§aКоманда §f" + teamName + "§a успешно создана!"));
+        sendAchievement(serverOwner, "Команда создана!", "Вы успешно создали команду §b" + teamName, "COMPASS", true);
 
         System.out.println("[TeamManager] Команда создана на сервере. Отправляем синхронизацию...");
 
@@ -235,8 +237,11 @@ public class TeamManager {
             ServerPlayer invited = serverInviter.getServer().getPlayerList().getPlayer(player);
             if (invited != null) {
                 invited.sendSystemMessage(Component.literal("§eВы получили приглашение в команду §b" + teamName + " §eот §f" + inviter.getName().getString()));
-                serverInviter.sendSystemMessage(Component.literal("§aПриглашение отправлено игроку §f" + (invited.getName().getString())));
+                sendAchievement(invited, "Приглашение в команду", "Вы получили приглашение в §b" + teamName + " от §f" + inviter.getName().getString(), "PAPER", true);
             }
+            serverInviter.sendSystemMessage(Component.literal("§aПриглашение отправлено игроку §f" + (invited.getName().getString())));
+            sendAchievement(serverInviter, "Приглашение отправлено", "Приглашение в §b" + teamName + " отправлено", "PAPER", true);
+
             data.setDirty(true);
             syncTeamToAll(teamName);
             return true;
@@ -290,6 +295,14 @@ public class TeamManager {
         team.addMember(player);
         playerTeams.computeIfAbsent(player, k -> new HashSet<>()).add(teamName);
 
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        if (server != null) {
+            ServerPlayer p = server.getPlayerList().getPlayer(player);
+            if (p != null) {
+                sendAchievementToTeam(teamName, "Новый участник", "Игрок §f" + p.getName().getString() + " вступил в команду", "COMPASS", true);
+            }
+        }
+
         data.setDirty(true);
         syncTeamToAll(teamName);
         return true;
@@ -305,6 +318,14 @@ public class TeamManager {
         if (team.cancelInvitation(player)) {
             data.setDirty(true);
             syncTeamToAll(teamName);
+
+            MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+            if (server != null) {
+                ServerPlayer p = server.getPlayerList().getPlayer(player);
+                if (p != null) {
+                    sendAchievement(p, "Приглашение отклонено", "Вы отклонили приглашение в §b" + teamName, null, false);
+                }
+            }
             return true;
         }
         return false;
@@ -365,6 +386,8 @@ public class TeamManager {
             teams.remove(teamName);
         }
 
+        sendAchievementToTeam(teamName, "Участник покинул команду", "Игрок §f" + (player != null ? player.getName().getString() : "неизвестно") + " покинул команду", "BARRIER", false);
+
         data.setDirty(true);
         syncTeamToAll(teamName);
 
@@ -392,8 +415,10 @@ public class TeamManager {
         ServerPlayer kicker = server != null ? server.getPlayerList().getPlayer(kickerUUID) : null;
 
         if (target != null) {
-            target.sendSystemMessage(Component.literal("§cВы были исключены из команды §f" + teamName));
+            sendAchievement(target, "Вы исключены", "Вы были исключены из команды §b" + teamName, "BARRIER", false);
         }
+        sendAchievementToTeam(teamName, "Участник исключён", "Игрок §f" + target.getName().getString() + " исключён из команды", "BARRIER", false);
+
         if (kicker != null) {
             kicker.sendSystemMessage(Component.literal("§aВы исключили игрока из команды §f" + teamName));
         }
@@ -443,6 +468,10 @@ public class TeamManager {
         if (team == null || !team.getOwner().equals(owner)) {
             return false;
         }
+
+        String msg = enabled ? "Дружественный огонь включён" : "Дружественный огонь выключён";
+        String icon = enabled ? "IRON_SWORD" : "SHIELD";
+        sendAchievementToTeam(teamName, msg, "В команде §b" + teamName + " " + (enabled ? "включён" : "выключен") + " дружественный огонь", icon, !enabled);
 
         team.setFriendlyFire(enabled);
         data.setDirty(true);
@@ -504,6 +533,8 @@ public class TeamManager {
                 p.sendSystemMessage(Component.literal("§cПриглашение в команду §f" + teamName + "§c отменено"));
             }
         }
+
+        sendAchievementToTeam(teamName, "Команда удалена", "Команда §b" + teamName + " была удалена", "BARRIER", false);
 
         data.getTeams().remove(teamName);
         data.setDirty(true);
@@ -646,6 +677,29 @@ public class TeamManager {
             });
         }
     }
+
+    // Отправить одному игроку
+    public static void sendAchievement(ServerPlayer player, String title, String description, String iconItem, boolean isPositive) {
+        NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player),
+                new AchievementNotificationPacket(title, description, iconItem, isPositive));
+    }
+
+    // Отправить всем в команде (включая лидера)
+    public static void sendAchievementToTeam(String teamName, String title, String description, String iconItem, boolean isPositive) {
+        Team team = getServerTeam(teamName);
+        if (team == null) return;
+
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        if (server == null) return;
+
+        for (UUID uuid : team.getMembers()) {
+            ServerPlayer p = server.getPlayerList().getPlayer(uuid);
+            if (p != null) {
+                sendAchievement(p, title, description, iconItem, isPositive);
+            }
+        }
+    }
+
     @SubscribeEvent
     public static void onPlayerLoggedIn(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {

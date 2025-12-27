@@ -523,23 +523,35 @@ public class OtherPlayerProfileScreen extends Screen {
         renderScroller(g);
     }
 
+    // Верхний бар — теперь квесты
     private void renderProgressBar1(GuiGraphics g) {
         int centerX = width / 2;
         int baseY = (height - GUI_HEIGHT) / 2;
         int x = centerX - BAR_W / 2 + 24;
         int y = baseY + 110 - 34;
-        int fillPercent = 25;
+
+        UUID playerUUID = targetPlayerId;
+
+        int fillPercent = FTBQuestsStats.getQuestProgressPercent(playerUUID);
+
         int fillWidth = (int) (BAR_W * fillPercent / 100.0);
+
         g.blit(ATLAS, x, y, BAR_U, BAR_V, fillWidth, BAR_H, 256, 256);
     }
 
+    // Нижний бар — теперь уровень
     private void renderProgressBar2(GuiGraphics g) {
         int centerX = width / 2;
         int baseY = (height - GUI_HEIGHT) / 2;
         int x = centerX - BAR_W / 2 + 24;
         int y = baseY + 118 - 65;
-        int fillPercent = 75;
+
+        UUID playerUUID = targetPlayerId;
+
+        int fillPercent = SkillTreeStats.getOverallProgressPercent(playerUUID);
+
         int fillWidth = (int) (BAR_W * fillPercent / 100.0);
+
         g.blit(ATLAS, x, y, BAR_U, BAR_V, fillWidth, BAR_H, 256, 256);
     }
 

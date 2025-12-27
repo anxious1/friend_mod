@@ -11,6 +11,7 @@ import net.minecraft.stats.Stat;
 import net.minecraft.stats.Stats;
 import net.minecraft.stats.StatsCounter;
 import net.minecraft.core.Registry;
+import com.mod.raidportals.RaidPortalsSavedData;
 
 import java.util.UUID;
 
@@ -27,6 +28,7 @@ public class StatisticsScreen extends Screen {
     // Список всех 8 строк статистики (статично, для теста)
     private int scrollOffset = 0;
     private boolean isDraggingScroller = false;
+
 
     // Параметры скроллера
     private static final int VISIBLE_LINES = 4;
@@ -201,7 +203,25 @@ public class StatisticsScreen extends Screen {
         int savedTicks = profile.getPlayTimeTicks();
         long sessionMillis = profile.getCurrentSessionMillis();
         int sessionTicks = (int)(sessionMillis / 50); // ~20 тиков в секунду
+        int completedQuests = FTBQuestsStats.getCompletedQuests(statsOwnerUUID);
+        int totalQuests = FTBQuestsStats.getTotalQuests(); // общее всегда доступно
+        int completedChapters = FTBQuestsStats.getCompletedChapters(statsOwnerUUID);
+        int totalChapters = FTBQuestsStats.getTotalChapters();
 
+        // ← НОВОЕ: Порталы по тирам
+        int tier1 = 0;
+        int tier2 = 0;
+        int tier3 = 0;
+
+        RaidPortalsSavedData savedData = RaidPortalsSavedData.get(minecraft.getSingleplayerServer().overworld());
+        if (savedData != null) {
+            RaidPortalsSavedData.PlayerPortalData pd = savedData.playerPortals.get(statsOwnerUUID);
+            if (pd != null) {
+                tier1 = pd.completedTier1;
+                tier2 = pd.completedTier2;
+                tier3 = pd.completedTier3;
+            }
+        }
         int totalTicks = savedTicks + sessionTicks;
         int totalMinutes = totalTicks / 1200;
         int hours = totalMinutes / 60;
@@ -222,6 +242,12 @@ public class StatisticsScreen extends Screen {
                 "Смерти: " + profile.getDeaths(),
                 "Убито мобов: " + profile.getMobsKilled(),
                 "Время в игре: " + playTimeStr,
+                "Уровень персонажа: " + SkillTreeStats.getLevel(statsOwnerUUID),
+                "Квесты: " + completedQuests + "/" + totalQuests,
+                "Главы: " + completedChapters + "/" + totalChapters,
+                "Арены тир 1: " + tier1,
+                "Арены тир 2: " + tier2,
+                "Арены тир 3: " + tier3,
                 "Пройдено: " + distanceStr
         };
     }

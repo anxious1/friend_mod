@@ -25,6 +25,7 @@ public class NetworkHandler {
     private static int id = 0;
 
     public static void register() {
+        registerMessage(AchievementNotificationPacket.class, AchievementNotificationPacket::encode, AchievementNotificationPacket::decode, AchievementNotificationPacket::handle);
         INSTANCE.registerMessage(id++, RequestProfilePacket.class, RequestProfilePacket::encode, RequestProfilePacket::decode, RequestProfilePacket::handle, Optional.of(NetworkDirection.PLAY_TO_SERVER));
         registerMessage(StatsSyncPacket.class, StatsSyncPacket::encode, StatsSyncPacket::decode, StatsSyncPacket::handle);
         registerMessage(OpenTeamMemberScreenPacket.class, OpenTeamMemberScreenPacket::encode, OpenTeamMemberScreenPacket::decode, OpenTeamMemberScreenPacket::handle);

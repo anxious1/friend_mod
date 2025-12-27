@@ -48,6 +48,10 @@ public class UpdateTeamSettingsPacket {
             }
 
             // Меняем данные только на сервере
+            boolean oldShowTag = team.showTag();
+            boolean oldShowCompass = team.showCompass();
+            boolean oldFriendlyFire = team.isFriendlyFire();
+
             team.setShowTag(msg.showTag);
             team.setShowCompass(msg.showCompass);
             team.setFriendlyFire(msg.friendlyFire);
@@ -59,6 +63,30 @@ public class UpdateTeamSettingsPacket {
 
             // Рассылаем всем актуальные данные
             TeamManager.syncTeamToAll(msg.teamName);
+
+            // === УВЕДОМЛЕНИЯ ===
+            // Тег
+            if (msg.showTag != oldShowTag) {
+                String title = msg.showTag ? "Отображение тега включено" : "Отображение тега выключено";
+                String desc = "В команде §b" + msg.teamName + " " + (msg.showTag ? "включено" : "выключено") + " отображение тега";
+                TeamManager.sendAchievementToTeam(msg.teamName, title, desc, "NAME_TAG", msg.showTag);
+            }
+
+            // Компас
+            if (msg.showCompass != oldShowCompass) {
+                String title = msg.showCompass ? "Компас включён" : "Компас выключен";
+                String desc = "В команде §b" + msg.teamName + " " + (msg.showCompass ? "включён" : "выключен") + " командный компас";
+                TeamManager.sendAchievementToTeam(msg.teamName, title, desc, "COMPASS", msg.showCompass);
+            }
+
+            // Дружественный огонь
+            if (msg.friendlyFire != oldFriendlyFire) {
+                String title = msg.friendlyFire ? "Дружественный огонь включён" : "Дружественный огонь выключен";
+                String desc = "В команде §b" + msg.teamName + " " + (msg.friendlyFire ? "включён" : "выключен") + " дружественный огонь";
+                String icon = msg.friendlyFire ? "IRON_SWORD" : "SHIELD";
+                boolean positive = !msg.friendlyFire; // выключение FF — позитивно
+                TeamManager.sendAchievementToTeam(msg.teamName, title, desc, icon, positive);
+            }
         });
         ctx.get().setPacketHandled(true);
     }
