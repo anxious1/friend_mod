@@ -188,7 +188,7 @@ public class MyProfileScreen extends Screen {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
                 // 1. Рисуем затемнение ВСЕГО ЭКРАНА
-                g.fill(0, 0, width, height, 0xB3000000); // ← ЗДЕСЬ!
+               this.renderBackground(g);
 
                 // 2. Рисуем текстуру фона GUI поверх затемнения
                 RenderSystem.setShaderTexture(0, ATLAS);
@@ -480,7 +480,7 @@ public class MyProfileScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mx, int my, float pt) {
-        renderBackground(g);
+        this.renderBackground(g);
         renderBg(g, pt, mx, my);
 
         if (minecraft.player != null) {

@@ -94,46 +94,32 @@ public class LeaveTeamScreen extends Screen {
     private void onCancel() {
         minecraft.setScreen(parentScreen);
     }
+
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // 1. Рисуем TeamMemberScreen в замороженном состоянии
-        // Стало:
-        if (this.parentScreen != null && this.parentScreen instanceof TeamMemberScreen teamMember) {
-            // 1. Сначала фон TeamMemberScreen
-            RenderSystem.setShaderTexture(0, TeamMemberScreen.ATLAS);
-            int guiX = teamMember.left();
-            int guiY = teamMember.top();
-            g.blit(TeamMemberScreen.ATLAS, guiX, guiY, 0, 0,
-                    TeamMemberScreen.GUI_WIDTH, TeamMemberScreen.GUI_HEIGHT, 256, 256);
-
-            // 2. ТОЛЬКО элементы (текст, иконки), НЕ КНОПКИ
-            teamMember.renderElementsWithoutButtons(g);
+        // Рисуем родительский экран (TeamMemberScreen) полностью
+        if (parentScreen != null) {
+            parentScreen.render(g, mouseX, mouseY, partialTick);
         }
 
-        // 2. Дополнительное глубокое затемнение поверх
-        LeaveTeamScreen.this.renderBackground(g);
+        // Дополнительное затемнение
+        g.fill(0, 0, width, height, 0xB3000000);
 
-        // 3. Рисуем окно подтверждения
+        // Рисуем своё окно
         int x = left();
         int y = top();
         g.blit(ATLAS, x, y, FON_U, FON_V, FON_W, FON_H, 256, 256);
 
-        // 4. ТЕКСТ КОМАНДЫ В ОКНЕ ПОДТВЕРЖДЕНИЯ
-        String teamText = teamName;
-        if (teamTag != null && !teamTag.isEmpty()) {
-            teamText += "[" + teamTag + "]";
-        }
-
+        // Текст команды
+        String teamText = teamName + (teamTag != null && !teamTag.isEmpty() ? "[" + teamTag + "]" : "");
         if (font.width(teamText) > TEAM_NAME_W) {
             teamText = font.plainSubstrByWidth(teamText, TEAM_NAME_W - 6) + "..";
         }
-
         int textX = x + TEAM_NAME_U + (TEAM_NAME_W - font.width(teamText)) / 2;
         int textY = y + TEAM_NAME_V + (TEAM_NAME_H - 8) / 2;
         g.drawString(font, teamText, textX, textY, 0xFFFFFF, false);
 
-        // 5. КНОПКИ LeaveTeamScreen
-        super.render(g, mouseX, mouseY, partialTick);
+        super.render(g, mouseX, mouseY, partialTick); // кнопки
     }
 
     @Override

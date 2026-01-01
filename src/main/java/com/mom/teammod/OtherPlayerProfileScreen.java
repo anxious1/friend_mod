@@ -572,7 +572,7 @@ public class OtherPlayerProfileScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mx, int my, float pt) {
         // Стандартный рендер фона (как в MyProfileScreen)
-        renderBackground(g);
+        this.renderBackground(g);
 
         // Текстура GUI и все элементы
         renderBg(g, pt, mx, my);

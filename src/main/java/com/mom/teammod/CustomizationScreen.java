@@ -91,7 +91,7 @@ public class CustomizationScreen extends Screen {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
                 // 1. Рисуем только фон мира (как в StatisticsScreen)
-                CustomizationScreen.this.renderBackground(g);
+               this.renderBackground(g);
 
                 // 2. Рисуем ТОЛЬКО текстуру фона GUI — БЕЗ ТЕКСТА
                 RenderSystem.setShaderTexture(0, ATLAS);
@@ -119,7 +119,7 @@ public class CustomizationScreen extends Screen {
         ColorPickerScreen2 picker = new ColorPickerScreen2() {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
-                CustomizationScreen.this.renderBackground(g);
+                this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - 256) / 2;
                 int guiY = (height - 170) / 2;
@@ -141,7 +141,7 @@ public class CustomizationScreen extends Screen {
         LogoPickerScreen picker = new LogoPickerScreen() {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
-                CustomizationScreen.this.renderBackground(g);
+                this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - 256) / 2;
                 int guiY = (height - 170) / 2;
@@ -163,7 +163,7 @@ public class CustomizationScreen extends Screen {
         AchievementPickerScreen1 picker = new AchievementPickerScreen1() {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
-                CustomizationScreen.this.renderBackground(g);
+                this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - 256) / 2;
                 int guiY = (height - 170) / 2;
@@ -183,7 +183,7 @@ public class CustomizationScreen extends Screen {
     private void openAchivPicker2() {
         AchievementPickerScreen2 picker = new AchievementPickerScreen2() {
             @Override public void render(GuiGraphics g, int mx, int my, float pt) {
-                CustomizationScreen.this.renderBackground(g);
+                this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - 256) / 2;
                 int guiY = (height - 170) / 2;
@@ -199,7 +199,7 @@ public class CustomizationScreen extends Screen {
     private void openAchivPicker3() {
         AchievementPickerScreen3 picker = new AchievementPickerScreen3() {
             @Override public void render(GuiGraphics g, int mx, int my, float pt) {
-                CustomizationScreen.this.renderBackground(g);
+                this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - 256) / 2;
                 int guiY = (height - 170) / 2;
@@ -215,7 +215,7 @@ public class CustomizationScreen extends Screen {
     private void openAchivPicker4() {
         AchievementPickerScreen4 picker = new AchievementPickerScreen4() {
             @Override public void render(GuiGraphics g, int mx, int my, float pt) {
-                CustomizationScreen.this.renderBackground(g);
+                this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - 256) / 2;
                 int guiY = (height - 170) / 2;
@@ -351,7 +351,7 @@ public class CustomizationScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        renderBackground(g);
+        this.renderBackground(g);
         RenderSystem.setShaderTexture(0, ATLAS);
         g.blit(ATLAS, left(), top(), 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
 

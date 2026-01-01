@@ -180,7 +180,7 @@ public class MyTeamsListScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        renderBackground(g);
+        this.renderBackground(g);
         RenderSystem.setShaderTexture(0, ATLAS);
         g.blit(ATLAS, left(), top(), 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
 

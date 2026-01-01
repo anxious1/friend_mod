@@ -152,20 +152,38 @@ public class PlayersListScreen extends Screen {
     public void refreshFromSync() {
         refreshPlayerList();
     }
-    
+
 
     private void repositionSlots() {
-        this.renderables.removeIf(w -> w instanceof PlayerSlotWidget);
+        // ШАГ 1: Удаляем ВСЕ PlayerSlotWidget И ВСЕ вложенные nameButton
+        List<AbstractWidget> toRemove = new ArrayList<>();
+        for (var widget : this.renderables) {
+            if (widget instanceof PlayerSlotWidget slot) {
+                if (slot.nameButton != null) {
+                    toRemove.add(slot.nameButton);
+                }
+                toRemove.add(slot);
+            } else if (widget instanceof Button btn && btn.getMessage().getString().isEmpty() == false) {
+                // Дополнительно ловим любые кнопки с именами (на всякий случай)
+                String text = btn.getMessage().getString();
+                if (text.equals(text.trim()) && !text.isEmpty() && Character.isLetter(text.charAt(0))) {
+                    toRemove.add(btn);
+                }
+            }
+        }
+        this.renderables.removeAll(toRemove);
 
         int baseX = left() + 45 - 21;
         int baseY = top() + 32 + 14;
 
-        for (int i = 0; i < VISIBLE_SLOTS; i++) {
-            int index = i + scrollOffset;
-            if (index >= filteredPlayers.size()) break;
+        int startIndex = scrollOffset;
+        int endIndex = Math.min(startIndex + VISIBLE_SLOTS, filteredPlayers.size());
 
-            PlayerEntry entry = filteredPlayers.get(index);
-            addRenderableWidget(new PlayerSlotWidget(baseX, baseY + i * SLOT_HEIGHT, entry));
+        for (int i = startIndex; i < endIndex; i++) {
+            PlayerEntry entry = filteredPlayers.get(i);
+            int slotY = baseY + (i - startIndex) * SLOT_HEIGHT;
+
+            addRenderableWidget(new PlayerSlotWidget(baseX, slotY, entry));
         }
     }
 
@@ -197,7 +215,7 @@ public class PlayersListScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float pt) {
-        renderBackground(g);
+        this.renderBackground(g);
 
         RenderSystem.setShaderTexture(0, ATLAS);
         g.blit(ATLAS, left(), top(), 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);

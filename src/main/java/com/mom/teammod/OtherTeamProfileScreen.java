@@ -258,7 +258,7 @@ public class OtherTeamProfileScreen extends Screen {
             boolean online = player != null;
             boolean isOwner = playerId.equals(ownerId);
 
-            int buttonY = baseY + 20 + 4 + i * slotHeight;
+            int buttonY = baseY + 20 + 14 + 4 + i * slotHeight;
 
             final String finalName = name;
             final UUID finalPlayerId = playerId;
@@ -394,7 +394,7 @@ public class OtherTeamProfileScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        renderBackground(g);
+        this.renderBackground(g);
         renderBg(g, partialTick, mouseX, mouseY);
 
         int guiX = left();

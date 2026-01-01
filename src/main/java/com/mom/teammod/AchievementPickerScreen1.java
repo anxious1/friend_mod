@@ -63,7 +63,7 @@ public class AchievementPickerScreen1 extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        renderBackground(g); // ← ванильный фон уже с затемнением
+        this.renderBackground(g); // ← ванильный фон уже с затемнением
         // или вручную:
         // g.fill(0, 0, width, height, 0xB3000000);
 

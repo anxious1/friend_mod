@@ -120,7 +120,7 @@ public class TeamProfileOwner extends Screen {
         addTransparentButton(guiX - 2 - 2 + OFFSET_X/4, guiY + 31 - 1 + OFFSET_Y/4, 27, 11,
                 this::openPlayersList, Component.literal("Список участников"));
 
-        addTransparentButton(guiX + (67-7+9) + OFFSET_X/4, guiY + 105+1 + OFFSET_Y/4, 56, 11,
+        addTransparentButton(guiX + (67-7+9) + OFFSET_X/4 - 5, guiY + 105+1 + OFFSET_Y/4 - 1, 56, 11,
                 this::openCustomization, Component.empty());
 
         addToggleLockButton(guiX + 118 - 72 - 6 - 9 +4 + OFFSET_X/4 - 2, guiY + 90 - 42 - 20 +4 + OFFSET_Y/4 - 1, 9, 9);
@@ -140,7 +140,7 @@ public class TeamProfileOwner extends Screen {
         }
 
         int baseX = guiX + 10;
-        int baseY = guiY + 42;
+        int baseY = guiY + 42 + 14;
         int cellX = baseX + 21 - 9;
         int slotHeight = ONLINE_H + 1; // высота одного слота
 
@@ -293,7 +293,7 @@ public class TeamProfileOwner extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        renderBackground(g);
+        this.renderBackground(g);
         renderBg(g, partialTick, mouseX, mouseY);
 
         int guiX = left();
@@ -399,7 +399,7 @@ public class TeamProfileOwner extends Screen {
 
         int visibleSlots = 3; // сколько строк видно одновременно в текстуре — это фиксировано!
         int slotHeight = ONLINE_H + 1; // 15 + 1 = 16 пикселей на слот
-        int startY = top() + 42 + 20 + 4; // начальная Y первого видимого слота
+        int startY = top() + 42 + 20 + 4 + 14; // начальная Y первого видимого слота
 
         for (int i = 0; i < playerButtons.size(); i++) {
             Button button = playerButtons.get(i);

@@ -183,7 +183,7 @@ public class CreatingTeamScreen extends Screen {
         ColorPickerScreen picker = new ColorPickerScreen() {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
-                CreatingTeamScreen.this.renderBackground(g);
+                this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - 256) / 2;
                 int guiY = (height - 170) / 2;
@@ -204,7 +204,7 @@ public class CreatingTeamScreen extends Screen {
         ColorPickerScreen2 picker = new ColorPickerScreen2() {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
-                CreatingTeamScreen.this.renderBackground(g);
+                this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - 256) / 2;
                 int guiY = (height - 170) / 2;
@@ -225,7 +225,7 @@ public class CreatingTeamScreen extends Screen {
         LogoPickerScreen picker = new LogoPickerScreen() {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
-                CreatingTeamScreen.this.renderBackground(g);
+                this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - 256) / 2;
                 int guiY = (height - 170) / 2;
@@ -305,7 +305,7 @@ public class CreatingTeamScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mx, int my, float pt) {
-        renderBackground(g);
+        this.renderBackground(g);
 
         RenderSystem.setShaderTexture(0, ATLAS);
         int guiX = left();

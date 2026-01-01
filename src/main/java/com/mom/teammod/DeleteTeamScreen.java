@@ -148,7 +148,7 @@ public class DeleteTeamScreen extends Screen {
         }
 
         // 2. Глубокое затемнение поверх
-        DeleteTeamScreen.this.renderBackground(g);
+        this.renderBackground(g);
 
         // 3. Рисуем окно подтверждения удаления
         int x = left();

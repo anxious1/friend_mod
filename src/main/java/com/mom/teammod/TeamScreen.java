@@ -281,15 +281,11 @@ public class TeamScreen extends Screen {
 
             @Override
             public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                if (this.isHovered()) {
-                    g.fill(getX(), getY(), getX() + w, getY() + h, 0x30FFFFFF);
-                }
+                if (isHovered()) g.fill(getX(), getY(), getX() + w, getY() + h, 0x30FFFFFF);
 
                 if (enabled[0]) {
-                    RenderSystem.setShaderTexture(0, ATLAS);
                     g.blit(ATLAS, getX() + 2, getY() + 2, PIMP_DOT_U, PIMP_DOT_V, PIMP_DOT_W, PIMP_DOT_H, 256, 256);
-                    g.blit(ATLAS, buttonX - 44 + holderGuiX, buttonY - 147 + holderGuiY,
-                            iconU, iconV, iconW, iconH, 256, 256);
+                    g.blit(ATLAS, getX() + w + 5, getY() + (h - iconH) / 2, iconU, iconV, iconW, iconH, 256, 256);
                 }
             }
         };
@@ -356,19 +352,19 @@ public class TeamScreen extends Screen {
 
 
     @Override
-    public void render(GuiGraphics g, int mx, int my, float pt) {
-        renderBackground(g);
-        renderBg(g, pt, mx, my);
-        renderScroller(g);
-        super.render(g, mx, my, pt);
-    }
+    public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        this.renderBackground(g);
 
-    protected void renderBg(GuiGraphics g, float pt, int mx, int my) {
-        RenderSystem.setShaderTexture(0, BACKGROUND);
+        RenderSystem.setShaderTexture(0, ATLAS);
         int x = (width - GUI_WIDTH) / 2;
         int y = (height - GUI_HEIGHT) / 2;
-        g.blit(BACKGROUND, x, y, 0, 0, GUI_WIDTH, GUI_HEIGHT, GUI_WIDTH, GUI_HEIGHT);
+        g.blit(ATLAS, x, y, 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
+
+        renderScroller(g);
+
+        super.render(g, mouseX, mouseY, partialTick);
     }
+
 
     private void rebuildTeamSlots() {
         // Удаляем старые плашки и кнопки команд
