@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-public class PlayersListScreen extends Screen {
+public class PlayersListScreen extends BaseModScreen {
 
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
             "textures/gui/players_list.png");
@@ -59,7 +59,7 @@ public class PlayersListScreen extends Screen {
     private static final int VISIBLE_SLOTS = 3;
     private static final int SLOT_HEIGHT = 28;
 
-    private final Screen parent;
+    private Screen parent;
     private final String teamName;
     private final List<PlayerEntry> players = new ArrayList<>();
 
@@ -71,8 +71,8 @@ public class PlayersListScreen extends Screen {
     private List<PlayerEntry> filteredPlayers = new ArrayList<>();
 
 
-    public PlayersListScreen(Screen parent, String teamName) {
-        super(Component.literal(""));
+    public PlayersListScreen(Screen parentScreen, String teamName) {
+        super(parentScreen, Component.literal(""));
         this.parent = parent;
         this.teamName = teamName;
     }
@@ -465,11 +465,7 @@ public class PlayersListScreen extends Screen {
                 ));
             } else {
                 // Чужой профиль — всё ок, ты уже передаёшь parent
-                minecraft.setScreen(new OtherPlayerProfileScreen(
-                        entry.id,
-                        PlayersListScreen.this,
-                        Component.literal("Профиль " + entry.name)
-                ));
+                minecraft.setScreen(new OtherPlayerProfileScreen(PlayersListScreen.this, entry.id, Component.literal("Профиль " + entry.name)));
             }
         }
 
@@ -502,4 +498,5 @@ public class PlayersListScreen extends Screen {
 
     @Override
     public boolean isPauseScreen() { return false; }
+
 }

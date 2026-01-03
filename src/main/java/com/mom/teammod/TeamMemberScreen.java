@@ -15,7 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-public class TeamMemberScreen extends Screen {
+public class TeamMemberScreen extends BaseModScreen {
 
     // АТЛАС для члена команды
     public static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
@@ -26,7 +26,6 @@ public class TeamMemberScreen extends Screen {
     private static final int TAG_V      = 207;
     private static final int TAG_W      = 28;
     private static final int TAG_H      = 10;
-    private Screen parentScreen;
     private Button leaveButton = null;
     private static final int COMPASS_U  = 1;   // compass
     private static final int COMPASS_V  = 231;
@@ -80,10 +79,9 @@ public class TeamMemberScreen extends Screen {
     private static final int XP_BAR_W = 83;
     private static final int XP_BAR_H = 5;
 
-    public TeamMemberScreen(Screen parent, String teamName, String teamTag,
-                            boolean showTag, boolean showCompass, boolean friendlyFire,
-                            UUID teamLeader) {
-        super(Component.literal(teamName));
+    public TeamMemberScreen(Screen parentScreen, String teamName, String teamTag,
+                            boolean showTag, boolean showCompass, boolean friendlyFire, UUID teamLeader) {
+        super(parentScreen, Component.literal(teamName));
         this.teamName = teamName;
         this.teamTag = teamTag;
         this.teamLeader = teamLeader;
@@ -268,8 +266,7 @@ public class TeamMemberScreen extends Screen {
                 if (finalPlayerId.equals(minecraft.player.getUUID())) {
                     minecraft.setScreen(new MyProfileScreen(TeamMemberScreen.this, Component.translatable("gui.teammod.profile")));
                 } else {
-                    minecraft.setScreen(new OtherPlayerProfileScreen(finalPlayerId, TeamMemberScreen.this,
-                            Component.literal("Профиль " + finalName)));
+                    minecraft.setScreen(new OtherPlayerProfileScreen(TeamMemberScreen.this, finalPlayerId, Component.literal("Профиль " + finalName)));
                 }
             }, s -> Component.empty()) {
                 @Override
@@ -569,11 +566,6 @@ public class TeamMemberScreen extends Screen {
         }
     }
 
-    @Override
-    public void onClose() {
-        // Просто закрываем экран, не возвращаемся к родителю
-        minecraft.setScreen(null);
-    }
 
     public void refreshFromSync() {
         int guiX = left();
@@ -587,5 +579,20 @@ public class TeamMemberScreen extends Screen {
 
         scrollOffset = 0;
         updateVisibleButtons();
+    }
+
+    private Button addAtlasButton(int x, int y, int w, int h, int u, int v, Runnable action, Component tooltip) {
+        Button btn = new Button(x, y, w, h, Component.empty(), b -> action.run(), s -> Component.empty()) {
+            @Override
+            public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                RenderSystem.setShaderTexture(0, ATLAS);
+                g.blit(ATLAS, getX(), getY(), u, v, w, h, 256, 256);
+                if (isHovered()) {
+                    g.fill(getX(), getY(), getX() + w, getY() + h, 0x30FFFFFF);
+                }
+            }
+        };
+        btn.setTooltip(Tooltip.create(tooltip));
+        return addRenderableWidget(btn);
     }
 }

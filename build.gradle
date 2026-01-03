@@ -94,7 +94,6 @@ dependencies {
     implementation fg.deobf("curse.maven:lionfish-api-1001614:5922047")
     implementation fg.deobf("curse.maven:caelus-308989:5281700")
     // curios
-    implementation fg.deobf("curse.maven:curios-309927:6418456")
     // attribute fix
     implementation fg.deobf("curse.maven:attributefix-280510:4648448")
     // max health fix
@@ -120,15 +119,18 @@ dependencies {
     implementation fg.deobf("curse.maven:ftb-quests-forge-289412:6829212")
 
     implementation fg.deobf("curse.maven:cloth-config-348521:5729105")
-    implementation fg.deobf("curse.maven:playeranimator-658587:4587214")
     implementation fg.deobf("curse.maven:combat-roll-678036:5625925")
 
-    implementation fg.deobf("curse.maven:caelus-308989:5281700")
+    implementation fg.deobf("curse.maven:kleiders-custom-renderer-api-682065:6475112")
+    implementation fg.deobf("curse.maven:pehkui-319596:4641059")
+    
+
 
     implementation fg.deobf('passiveskilltree:PassiveSkillTree:1.0.0')  // имя файла: PassiveSkillTree-1.0.0.jar или PassiveSkillTree.jar
     implementation fg.deobf('weightmod:weightmod:1.0.0')
     implementation fg.deobf('ftbquests:ftb-quests:1.0.0')
     implementation fg.deobf('raidportals:raidportals:1.0.0')
+    implementation fg.deobf('simpleraces:simpleraces:1.0.0')
 }
 
 tasks.named('processResources', ProcessResources).configure {

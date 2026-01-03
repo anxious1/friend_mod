@@ -29,7 +29,7 @@ public class RequestProfilePacket {
         ctx.get().enqueueWork(() -> {
             ServerPlayer sender = ctx.get().getSender();
             if (sender != null) {
-                ProfileManager.Profile profile = ProfileManager.getProfile(pkt.targetUUID);
+                ProfileManager.Profile profile = ProfileManager.getProfile(sender.serverLevel(), pkt.targetUUID);
 
                 // Правильная отправка пакета клиенту в 1.20.1 Forge
                 NetworkHandler.INSTANCE.send(

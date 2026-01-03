@@ -11,7 +11,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
-public class CustomizationScreen extends Screen {
+public class CustomizationScreen extends BaseModScreen {
 
     public static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/customization_background.png");
 
@@ -27,7 +27,7 @@ public class CustomizationScreen extends Screen {
     public static final int GUI_WIDTH = 256;
     public static final int GUI_HEIGHT = 170;
 
-    private final Screen parent;
+    private Screen parent;
     private final TeamManager.Team team;
 
     // Исходное состояние
@@ -43,8 +43,8 @@ public class CustomizationScreen extends Screen {
     private boolean isModified = false;
     private Button confirmButton;
 
-    public CustomizationScreen(Screen parent, TeamManager.Team team) {
-        super(Component.literal("Настройка команды"));
+    public CustomizationScreen(Screen parentScreen, TeamManager.Team team) {
+        super(parentScreen, Component.literal("Настройка команды"));
         this.parent = parent;
         this.team = team;
 
@@ -87,7 +87,7 @@ public class CustomizationScreen extends Screen {
     }
 
     private void openColorPicker1() {
-        ColorPickerScreen picker = new ColorPickerScreen() {
+        ColorPickerScreen picker = new ColorPickerScreen(this) {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
                 // 1. Рисуем только фон мира (как в StatisticsScreen)
@@ -116,7 +116,7 @@ public class CustomizationScreen extends Screen {
     }
 
     private void openColorPicker2() {
-        ColorPickerScreen2 picker = new ColorPickerScreen2() {
+        ColorPickerScreen2 picker = new ColorPickerScreen2(this) {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
                 this.renderBackground(g);
@@ -138,7 +138,7 @@ public class CustomizationScreen extends Screen {
     }
 
     private void openLogoPicker() {
-        LogoPickerScreen picker = new LogoPickerScreen() {
+        LogoPickerScreen picker = new LogoPickerScreen(this) {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
                 this.renderBackground(g);
@@ -160,7 +160,7 @@ public class CustomizationScreen extends Screen {
     }
 
     private void openAchivPicker1() {
-        AchievementPickerScreen1 picker = new AchievementPickerScreen1() {
+        AchievementPickerScreen1 picker = new AchievementPickerScreen1(this) {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
                 this.renderBackground(g);
@@ -181,7 +181,7 @@ public class CustomizationScreen extends Screen {
     }
 
     private void openAchivPicker2() {
-        AchievementPickerScreen2 picker = new AchievementPickerScreen2() {
+        AchievementPickerScreen2 picker = new AchievementPickerScreen2(this) {
             @Override public void render(GuiGraphics g, int mx, int my, float pt) {
                 this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
@@ -197,7 +197,7 @@ public class CustomizationScreen extends Screen {
     }
 
     private void openAchivPicker3() {
-        AchievementPickerScreen3 picker = new AchievementPickerScreen3() {
+        AchievementPickerScreen3 picker = new AchievementPickerScreen3(this) {
             @Override public void render(GuiGraphics g, int mx, int my, float pt) {
                 this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
@@ -213,7 +213,7 @@ public class CustomizationScreen extends Screen {
     }
 
     private void openAchivPicker4() {
-        AchievementPickerScreen4 picker = new AchievementPickerScreen4() {
+        AchievementPickerScreen4 picker = new AchievementPickerScreen4(this) {
             @Override public void render(GuiGraphics g, int mx, int my, float pt) {
                 this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);

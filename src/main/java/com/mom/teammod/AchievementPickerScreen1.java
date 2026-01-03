@@ -7,7 +7,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
-public class AchievementPickerScreen1 extends Screen {
+public class AchievementPickerScreen1 extends BaseModScreen {
 
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
             "textures/gui/list_of_achiv.png");
@@ -32,9 +32,7 @@ public class AchievementPickerScreen1 extends Screen {
     private int scrollOffset = 0;
     private boolean isDraggingScroller = false;
 
-    public AchievementPickerScreen1() {
-        super(Component.literal(""));
-    }
+    public AchievementPickerScreen1(Screen parentScreen) { super(parentScreen, Component.literal("")); }
 
     @Override
     protected void init() {
@@ -127,7 +125,6 @@ public class AchievementPickerScreen1 extends Screen {
         scrollOffset = Math.max(0, Math.min(scrollOffset, max));
     }
 
-    @Override public void onClose() { super.onClose(); }
     @Override public boolean isPauseScreen() { return false; }
 
     private void addTransparentButton(int x, int y, int w, int h, Runnable action, Component tooltip) {
@@ -143,4 +140,5 @@ public class AchievementPickerScreen1 extends Screen {
         btn.setTooltip(Tooltip.create(tooltip));
         this.addRenderableWidget(btn);
     }
+
 }

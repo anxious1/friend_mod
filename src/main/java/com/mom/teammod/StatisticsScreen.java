@@ -15,7 +15,7 @@ import com.mod.raidportals.RaidPortalsSavedData;
 
 import java.util.UUID;
 
-public class StatisticsScreen extends Screen {
+public class StatisticsScreen extends BaseModScreen {
 
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
             "textures/gui/statistics_background.png");
@@ -37,8 +37,8 @@ public class StatisticsScreen extends Screen {
     private static final int SCROLLER_HEIGHT = 27;        // 144.52 - 118.52 = 26
     private static final int SCROLL_TRACK_HEIGHT = 60;
 
-    public StatisticsScreen(Component title, UUID statsOwnerUUID) {
-        super(title);
+    public StatisticsScreen(Screen parentScreen, Component title, UUID statsOwnerUUID) {
+        super(parentScreen, title);
         this.statsOwnerUUID = statsOwnerUUID;
     }
 
@@ -177,12 +177,7 @@ public class StatisticsScreen extends Screen {
     @Override
     public void onClose() {
         ClientState.hidePlayerRender = false;
-        // Возвращаемся в MyProfileScreen (он в стеке)
-        if (minecraft.screen instanceof MyProfileScreen profileScreen) {
-            minecraft.setScreen(profileScreen);
-        } else {
-            minecraft.setScreen(null);
-        }
+        super.onClose();
     }
 
     private String[] getPlayerStats() {

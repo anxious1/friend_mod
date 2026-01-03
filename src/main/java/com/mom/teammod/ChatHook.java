@@ -43,8 +43,7 @@ public class ChatHook {
                 if (targetUUID.equals(minecraft.player.getUUID())) {
                     minecraft.setScreen(new MyProfileScreen(parent, Component.translatable("gui.teammod.profile")));
                 } else {
-                    minecraft.setScreen(new OtherPlayerProfileScreen(targetUUID, parent, Component.literal("Профиль " + playerName)));
-                }
+                    minecraft.setScreen(new OtherPlayerProfileScreen(parent, targetUUID, Component.literal("Профиль " + playerName)));                }
             }).pos(centerX - 100, centerY - 30).size(200, 20).build());
 
             addRenderableWidget(Button.builder(Component.literal("Написать личное сообщение"), b -> {
@@ -93,7 +92,7 @@ public class ChatHook {
                     boolean isMember = team.getMembers().contains(myUUID);
 
                     if (isOwner) {
-                        minecraft.setScreen(new TeamProfileOwner(null, minecraft.player.getInventory(), Component.literal(teamName), teamName, team.getTag(), team.showTag(), team.showCompass(), team.isFriendlyFire()));
+                        minecraft.setScreen(new TeamProfileOwner(this,null, minecraft.player.getInventory(), Component.literal(teamName), teamName, team.getTag(), team.showTag(), team.showCompass(), team.isFriendlyFire()));
                     } else if (isMember) {
                         minecraft.setScreen(new TeamMemberScreen(parent, teamName, team.getTag(), team.showTag(), team.showCompass(), team.isFriendlyFire(), team.getOwner()));
                     } else {
@@ -128,11 +127,10 @@ public class ChatHook {
                 .withStyle(Style.EMPTY
                         .withColor(nickColor)
                         .withBold(true)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/teammod_open_profile " + playerUUID))
-                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("§7Клик — открыть профиль игрока"))));
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("§7Клик — открыть профиль игрока")))
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/teammod_open_profile " + playerUUID))); // ← добавить эту строку
     }
 
-    // Тег команды
     private static Component makeTeamTag(String tag, String teamName, boolean isTeammate) {
         if (tag.isEmpty()) return Component.literal("");
 
@@ -141,8 +139,8 @@ public class ChatHook {
         return Component.literal("[" + tag + "]")
                 .withStyle(Style.EMPTY
                         .withColor(tagColor)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/teammod_open_team " + teamName))
-                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("§7Клик — открыть профиль команды"))));
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("§7Клик — открыть профиль команды")))
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/teammod_open_team " + teamName))); // ← добавить эту строку
     }
 
     @SubscribeEvent
@@ -182,7 +180,7 @@ public class ChatHook {
         String teamTag = "";
         String teamNameForTag = "";
         for (TeamManager.Team team : TeamManager.clientTeams.values()) {
-            if (team.getMembers().contains(senderUUID) && team.showTag() && !team.getTag().isEmpty()) {
+            if (team.getMembers().contains(senderUUID) && team.showTag() && TeamScreen.isTagGloballyVisible() && !team.getTag().isEmpty()) {
                 teamTag = team.getTag();
                 teamNameForTag = team.getName();
                 break;
@@ -222,8 +220,7 @@ public class ChatHook {
                 if (uuid.equals(mc.player.getUUID())) {
                     mc.setScreen(new MyProfileScreen(event.getScreen(), Component.translatable("gui.teammod.profile")));
                 } else {
-                    mc.setScreen(new OtherPlayerProfileScreen(uuid, event.getScreen(), Component.literal("Профиль " + name)));
-                }
+                    mc.setScreen(new OtherPlayerProfileScreen(event.getScreen(), uuid, Component.literal("Профиль " + name)));                }
                 event.setCanceled(true);
             } catch (Exception ignored) {}
         } else if (value.startsWith("/teammod_open_team ")) {
@@ -236,10 +233,7 @@ public class ChatHook {
                 boolean isMember = team.getMembers().contains(myUUID);
 
                 if (isOwner) {
-                    mc.setScreen(new TeamProfileOwner(null, mc.player.getInventory(),
-                            Component.literal(teamName), teamName, team.getTag(),
-                            team.showTag(), team.showCompass(), team.isFriendlyFire()));
-                } else if (isMember) {
+                    mc.setScreen(new TeamProfileOwner(event.getScreen(), null, mc.player.getInventory(), Component.literal(teamName), teamName, team.getTag(), team.showTag(), team.showCompass(), team.isFriendlyFire()));} else if (isMember) {
                     mc.setScreen(new TeamMemberScreen(event.getScreen(), teamName, team.getTag(),
                             team.showTag(), team.showCompass(), team.isFriendlyFire(), team.getOwner()));
                 } else {

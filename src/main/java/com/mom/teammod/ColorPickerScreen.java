@@ -8,7 +8,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
-public class ColorPickerScreen extends Screen {
+public class ColorPickerScreen extends BaseModScreen {
 
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
             "textures/gui/list_of_colours.png");
@@ -64,9 +64,7 @@ public class ColorPickerScreen extends Screen {
     private int scrollOffset = 0;
     private boolean isDraggingScroller = false;
 
-    public ColorPickerScreen() {
-        super(Component.literal(""));
-    }
+    public ColorPickerScreen(Screen parentScreen) { super(parentScreen, Component.literal("")); }
 
     @Override
     protected void init() {
@@ -240,11 +238,6 @@ public class ColorPickerScreen extends Screen {
         int maxScroll = Math.max(0, TOTAL_ITEMS - VISIBLE_ITEMS);
         scrollOffset = Math.round(ratio * maxScroll);
         scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
-    }
-
-    @Override
-    public void onClose() {
-        super.onClose();
     }
 
     @Override

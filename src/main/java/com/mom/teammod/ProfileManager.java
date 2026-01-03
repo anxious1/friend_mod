@@ -2,6 +2,7 @@ package com.mom.teammod;
 
 import com.mom.teammod.packets.ProfileSyncPacket;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -107,14 +108,19 @@ public class ProfileManager {
 
             loginTimeMillis = tag.getLong("loginTime");
         }
+
+        public int getBossKills() {
+            return customStats.getOrDefault("boss_kills", 0);
+        }
+
+        public void incrementBossKills() {
+            customStats.put("boss_kills", getBossKills() + 1);
+        }
     }
 
-    public static Profile getProfile(UUID playerUUID) {
-        return profiles.computeIfAbsent(playerUUID, uuid -> {
-            Profile profile = new Profile(uuid);
-            profile.setBackground("profile_bg1");
-            return profile;
-        });
+    public static Profile getProfile(ServerLevel level, UUID playerUUID) {
+        TeamWorldData data = TeamWorldData.get(level);
+        return data.getPlayerProfiles().computeIfAbsent(playerUUID, u -> new Profile(u));
     }
 
     public static Profile getClientProfile(UUID playerUUID) {
@@ -128,49 +134,28 @@ public class ProfileManager {
     // Главная правка: безопасная отправка профиля
     public static void syncProfileToClient(ServerPlayer player) {
         UUID uuid = player.getUUID();
-        Profile profile = getProfile(uuid);
-
-        NetworkHandler.INSTANCE.send(
-                PacketDistributor.PLAYER.with(() -> player),
-                new ProfileSyncPacket(uuid, profile)
-        );
+        Profile profile = getProfile(player.serverLevel(), uuid);
+        NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new ProfileSyncPacket(uuid, profile));
     }
 
+    // onPlayerLogin:
     @SubscribeEvent
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            Profile profile = getProfile(player.getUUID());
+            ServerLevel level = player.serverLevel();
+            Profile profile = getProfile(level, player.getUUID());
             profile.setLoginTime(System.currentTimeMillis());
-
             syncProfileToClient(player);
-
-            // Помечаем на всякий случай (если профиль новый)
-            TeamWorldData data = TeamWorldData.get(player.serverLevel());
-            if (data != null) {
-                data.setDirty(true);
-            }
+            TeamWorldData.get(level).setDirty();  // без true
         }
     }
 
+    // onPlayerLogout: УДАЛИТЬ addPlayTimeTicks + setDirty (дубликат, double время!):
     @SubscribeEvent
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            Profile profile = getProfile(player.getUUID());
-
-            long sessionMillis = profile.getCurrentSessionMillis();
-            if (sessionMillis > 0) {
-                int ticks = (int)(sessionMillis / 50);
-                profile.addPlayTimeTicks(ticks);
-
-                // Помечаем данные как изменённые после добавления времени
-                TeamWorldData data = TeamWorldData.get(player.serverLevel());
-                if (data != null) {
-                    data.setDirty(true);
-                }
-            }
-
-            clientProfiles.remove(player.getUUID());
-            syncProfileToClient(player);
+            clientProfiles.remove(player.getUUID());  // если нужно
+            // sync удалить или оставить
         }
     }
 }

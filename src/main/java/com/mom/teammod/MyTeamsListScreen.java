@@ -12,7 +12,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import java.util.*;
 
-public class MyTeamsListScreen extends Screen {
+public class MyTeamsListScreen extends BaseModScreen {
 
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
             "textures/gui/my_teams_list.png");
@@ -33,11 +33,10 @@ public class MyTeamsListScreen extends Screen {
     public final Set<String> clickedTeams = new HashSet<>();
     private int scrollOffset = 0;
 
-    private final Screen parentScreen;
     private Button confirmButton;
 
     public MyTeamsListScreen(Screen parentScreen) {
-        super(Component.literal(""));
+        super(parentScreen, Component.literal(""));
         this.parentScreen = parentScreen;
     }
 
@@ -188,15 +187,6 @@ public class MyTeamsListScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 256) {
-            minecraft.setScreen(parentScreen);
-            return true;
-        }
-        return super.keyPressed(keyCode, scanCode, modifiers);
-    }
-
-    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
         int total = myTeams.size();
         if (total <= VISIBLE_SLOTS) return false;
@@ -248,4 +238,5 @@ public class MyTeamsListScreen extends Screen {
             g.drawString(font, displayText, getX() + 10, getY() + 8, 0xFFFFFF, false);
         }
     }
+
 }

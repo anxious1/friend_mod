@@ -66,6 +66,7 @@ public class CreatingTeamScreen extends Screen {
     private boolean showTag = true;        // knopik1 - отображение тега команды
     private boolean showCompass = true;    // knopik2 - отображение компаса
     private boolean friendlyFire = true;   // knopik3 - дружественный огонь
+    Screen parentScreen;
 
     public CreatingTeamScreen(Screen parent) {
         super(Component.literal("Создать команду"));
@@ -180,7 +181,7 @@ public class CreatingTeamScreen extends Screen {
     }
 
     private void openColor1() {
-        ColorPickerScreen picker = new ColorPickerScreen() {
+        ColorPickerScreen picker = new ColorPickerScreen(this) {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
                 this.renderBackground(g);
@@ -201,7 +202,7 @@ public class CreatingTeamScreen extends Screen {
     }
 
     private void openColor2() {
-        ColorPickerScreen2 picker = new ColorPickerScreen2() {
+        ColorPickerScreen2 picker = new ColorPickerScreen2(this) {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
                 this.renderBackground(g);
@@ -222,7 +223,7 @@ public class CreatingTeamScreen extends Screen {
     }
 
     private void openShape() {
-        LogoPickerScreen picker = new LogoPickerScreen() {
+        LogoPickerScreen picker = new LogoPickerScreen(this) {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
                 this.renderBackground(g);
@@ -290,6 +291,7 @@ public class CreatingTeamScreen extends Screen {
             TeamManager.Team team = TeamManager.clientTeams.get(teamName);
             if (team != null) {
                 minecraft.setScreen(new TeamProfileOwner(
+                        this,
                         null,
                         minecraft.player.getInventory(),
                         Component.literal(teamName),
@@ -352,6 +354,14 @@ public class CreatingTeamScreen extends Screen {
                 return true;
             }
         }
+
+        if (k == 256) { // ESC
+            if (parentScreen != null) {
+                minecraft.setScreen(parentScreen);
+                return true;
+            }
+        }
+
         return super.keyPressed(k, s, m);
     }
 

@@ -659,7 +659,7 @@ public class TeamManager {
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
             // Создаём профиль сразу
-            ProfileManager.getProfile(player.getUUID());
+            ProfileManager.Profile profile = ProfileManager.getProfile(player.serverLevel(), player.getUUID());
 
             // Синхронизируем обычный профиль (background и т.д.)
             ProfileManager.syncProfileToClient(player);

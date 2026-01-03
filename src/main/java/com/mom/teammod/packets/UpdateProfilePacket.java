@@ -3,6 +3,7 @@ package com.mom.teammod.packets;
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.ProfileManager;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
 
 import java.util.function.Supplier;
@@ -24,7 +25,8 @@ public class UpdateProfilePacket {
 
     public static void handle(UpdateProfilePacket pkt, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
-            ProfileManager.Profile profile = ProfileManager.getProfile(ctx.get().getSender().getUUID());
+            ServerPlayer sender = ctx.get().getSender();
+            ProfileManager.Profile profile = ProfileManager.getProfile(sender.serverLevel(), sender.getUUID());
             profile.setBackground(pkt.background);
             ProfileManager.syncProfileToClient(ctx.get().getSender());
         });

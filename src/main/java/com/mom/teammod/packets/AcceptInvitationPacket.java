@@ -53,16 +53,7 @@ public class AcceptInvitationPacket {
                     if (playerUUID.equals(Minecraft.getInstance().player.getUUID())) {
                         Minecraft.getInstance().execute(() -> {
                             Minecraft mc = Minecraft.getInstance();
-                            mc.setScreen(new TeamProfileOwner(
-                                    null,
-                                    mc.player.getInventory(),
-                                    Component.literal(pkt.teamName),
-                                    pkt.teamName,
-                                    team.getTag(),
-                                    mc.player.getUUID().equals(team.getOwner()),
-                                    team.showTag(),
-                                    team.isFriendlyFire()
-                            ));
+                            mc.setScreen(new TeamProfileOwner(null, null, mc.player.getInventory(), Component.literal(pkt.teamName), pkt.teamName, team.getTag(), mc.player.getUUID().equals(team.getOwner()), team.showTag(), team.isFriendlyFire()));
                         });
                     }
                 }

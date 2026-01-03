@@ -14,7 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class TeamsListScreen extends Screen {
+public class TeamsListScreen extends BaseModScreen {
 
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/team_list.png");
 
@@ -47,8 +47,8 @@ public class TeamsListScreen extends Screen {
     private boolean isDraggingScrollbar = false;
     private EditBox searchBox;
 
-    public TeamsListScreen() {
-        super(Component.literal(""));
+    public TeamsListScreen(Screen parentScreen) {
+        super(parentScreen, Component.literal(""));
     }
 
     private int left() { return (width - GUI_WIDTH) / 2; }
@@ -65,11 +65,7 @@ public class TeamsListScreen extends Screen {
                 left() + 10 + 22,
                 top() + 179 - 38,
                 30, 12,
-                () -> minecraft.setScreen(new TeamScreen(
-                TeamsListScreen.this,                                      // ← parentScreen
-                new TeamMenu(0, minecraft.player.getInventory()),         // ← создаём меню
-                minecraft.player.getInventory(),
-                Component.translatable("gui.teammod.team_tab"))),
+                () -> minecraft.setScreen(this.parentScreen),  // ← заменить всю лямбду на эту
                 Component.literal("Назад")
         );
 
@@ -82,20 +78,6 @@ public class TeamsListScreen extends Screen {
         addRenderableWidget(searchBox);
 
         refreshTeamList();
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 256) { // 256 = клавиша ESC
-            minecraft.setScreen(new TeamScreen(
-                    TeamsListScreen.this,
-                    new TeamMenu(0, minecraft.player.getInventory()),
-                    minecraft.player.getInventory(),
-                    Component.translatable("gui.teammod.team_tab")
-            ));
-            return true;
-        }
-        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     private Button addTransparentButton(int x, int y, int w, int h, Runnable action, Component tooltip) {
@@ -309,7 +291,7 @@ public class TeamsListScreen extends Screen {
 
             if (isMember) {
                 // Если игрок - участник, открываем его профиль команды (TeamProfileOwner)
-                minecraft.setScreen(new TeamProfileOwner(
+                minecraft.setScreen(new TeamProfileOwner(this,
                         null, // TeamMenu может быть null
                         minecraft.player.getInventory(),
                         Component.literal(team.getName()),

@@ -16,7 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-public class OtherTeamProfileScreen extends Screen {
+public class OtherTeamProfileScreen extends BaseModScreen {
 
     // АТЛАС для чужой команды
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
@@ -85,10 +85,10 @@ public class OtherTeamProfileScreen extends Screen {
     private static final int XP_BAR_H = 5;   // 174.55 - 170.05 = 4.5, округляем до 5
 
 
-    public OtherTeamProfileScreen(Screen parent, String teamName, String teamTag,
-                                  boolean showTag, boolean showCompass, boolean friendlyFire,
-                                  UUID teamLeader) {
-        super(Component.literal(teamName));
+
+    public OtherTeamProfileScreen(Screen parentScreen, String teamName, String teamTag,
+                                  boolean showTag, boolean showCompass, boolean friendlyFire, UUID teamLeader) {
+        super(parentScreen, Component.literal(teamName));
         this.teamName = teamName;
         this.teamTag = teamTag;
         this.showTag = showTag;
@@ -265,8 +265,7 @@ public class OtherTeamProfileScreen extends Screen {
 
             Button playerButton = new Button(cellX, buttonY, ONLINE_W, ONLINE_H,
                     Component.empty(), b -> {
-                minecraft.setScreen(new OtherPlayerProfileScreen(finalPlayerId, OtherTeamProfileScreen.this,
-                        Component.literal("Профиль " + finalName)));
+                minecraft.setScreen(new OtherPlayerProfileScreen(OtherTeamProfileScreen.this, finalPlayerId, Component.literal("Профиль " + finalName)));
             }, s -> Component.empty()) {
                 @Override
                 public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
@@ -385,11 +384,6 @@ public class OtherTeamProfileScreen extends Screen {
         // Сбрасываем скролл
         scrollOffset = 0;
         updateVisibleButtons();
-    }
-
-    private void openPlayersList() {
-        // TODO: открыть список участников для просмотра (только просмотр, без редактирования)
-        System.out.println("Открыть список участников команды: " + teamName);
     }
 
     @Override
