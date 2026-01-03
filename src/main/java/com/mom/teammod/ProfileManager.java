@@ -27,6 +27,10 @@ public class ProfileManager {
 
         // Время входа для текущей сессии (в миллисекундах)
         private long loginTimeMillis = 0;
+        private boolean showOnCompass = true;
+
+        public boolean isShowOnCompass() { return showOnCompass; }
+        public void setShowOnCompass(boolean v) { this.showOnCompass = v; }
 
         public Profile(UUID playerUUID) {
             this.playerUUID = playerUUID;
@@ -80,6 +84,7 @@ public class ProfileManager {
             CompoundTag tag = new CompoundTag();
             tag.putString("background", background);
 
+            tag.putBoolean("showOnCompass", showOnCompass);
             CompoundTag statsTag = new CompoundTag();
             customStats.forEach(statsTag::putInt);
             customLongStats.forEach(statsTag::putLong);
@@ -94,6 +99,8 @@ public class ProfileManager {
 
             customStats.clear();
             customLongStats.clear();
+
+            showOnCompass = tag.contains("showOnCompass") ? tag.getBoolean("showOnCompass") : true;
 
             if (tag.contains("customStats")) {
                 CompoundTag statsTag = tag.getCompound("customStats");

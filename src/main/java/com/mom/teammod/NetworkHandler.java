@@ -40,6 +40,7 @@ public class NetworkHandler {
         registerMessage(TransferOwnershipPacket.class, TransferOwnershipPacket::encode, TransferOwnershipPacket::decode, TransferOwnershipPacket::handle);
         registerMessage(SetFriendlyFirePacket.class, SetFriendlyFirePacket::encode, SetFriendlyFirePacket::decode, SetFriendlyFirePacket::handle);
         registerMessage(SendChatPacket.class, SendChatPacket::encode, SendChatPacket::decode, SendChatPacket::handle);
+        registerMessage(UpdateCompassVisibilityPacket.class, UpdateCompassVisibilityPacket::encode, UpdateCompassVisibilityPacket::decode, UpdateCompassVisibilityPacket::handle);
 
         // ИСПРАВЛЕНО: лямбда вместо ::new, потому что несколько конструкторов
         INSTANCE.registerMessage(id++, TeamSyncPacket.class,

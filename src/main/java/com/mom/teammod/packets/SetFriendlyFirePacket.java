@@ -31,24 +31,8 @@ public class SetFriendlyFirePacket {
     public static void handle(SetFriendlyFirePacket pkt, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             UUID ownerUUID = ctx.get().getSender().getUUID();
-
             if (TeamManager.setFriendlyFire(pkt.teamName, pkt.enabled, ownerUUID)) {
-                TeamManager.Team team = TeamManager.getServerTeam(pkt.teamName);
-                if (team != null) {
-                    TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName);
-
-                    // Отправляем ВСЕМ участникам команды (включая владельца)
-                    for (UUID memberUUID : team.getMembers()) {
-                        ServerPlayer player = ctx.get().getSender().getServer()
-                                .getPlayerList().getPlayer(memberUUID);
-                        if (player != null) {
-                            NetworkHandler.INSTANCE.send(
-                                    PacketDistributor.PLAYER.with(() -> player),
-                                    syncPacket
-                            );
-                        }
-                    }
-                }
+                TeamManager.syncTeamToAll(pkt.teamName);
             }
         });
         ctx.get().setPacketHandled(true);

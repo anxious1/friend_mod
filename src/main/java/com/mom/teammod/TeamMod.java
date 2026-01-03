@@ -1,16 +1,23 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mom.teammod.items.TeamCompassItem;
+import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.ImageButton;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.renderer.item.ItemProperties;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.server.ServerAboutToStartEvent;
 import net.minecraftforge.event.server.ServerStartedEvent;
@@ -23,6 +30,10 @@ import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
+
+import java.util.Collections;
+import java.util.Set;
+import java.util.UUID;
 
 @Mod(TeamMod.MODID)
 public class TeamMod {
@@ -63,6 +74,134 @@ public class TeamMod {
         @SubscribeEvent
         public static void onClientSetup(FMLClientSetupEvent event) {
             LOGGER.info("TeamMod: Client setup started");
+
+            ItemProperties.register(Items.TEAM_COMPASS.get(), ResourceLocation.fromNamespaceAndPath(MODID, "angle"), (stack, level, entity, seed) -> {
+                if (entity == null || !(entity instanceof Player player)) {
+                    return spinningAngle();
+                }
+
+                ProfileManager.Profile holderProfile = ProfileManager.getClientProfile(player.getUUID());
+                if (!holderProfile.isShowOnCompass()) return spinningAngle();
+
+                CompoundTag tag = stack.getTag();
+                if (tag == null || !tag.hasUUID("TrackedPlayer")) return spinningAngle();
+
+                UUID tracked = tag.getUUID("TrackedPlayer");
+                Player target = level == null ? null : level.getPlayerByUUID(tracked);
+
+                if (target == null || !player.level().dimension().equals(target.level().dimension()) || player.distanceTo(target) > 5000) {
+                    return spinningAngle();
+                }
+
+                ProfileManager.Profile targetProfile = ProfileManager.getClientProfile(tracked);
+                if (!targetProfile.isShowOnCompass()) return spinningAngle();
+
+                Set<String> myTeams = TeamManager.clientPlayerTeams.getOrDefault(player.getUUID(), Collections.emptySet());
+                Set<String> targetTeams = TeamManager.clientPlayerTeams.getOrDefault(tracked, Collections.emptySet());
+                boolean visible = myTeams.stream()
+                        .anyMatch(t -> targetTeams.contains(t) && TeamManager.clientTeams.get(t) != null && TeamManager.clientTeams.get(t).showCompass());
+
+                if (!visible) return spinningAngle();
+
+                double dx = target.getX() - player.getX();
+                double dz = target.getZ() - player.getZ();
+
+                double angleToTarget = Math.atan2(dz, dx) + Math.PI / 2;   // +90°
+
+                double playerYaw = Math.toRadians(player.getYRot());
+
+                double angle = angleToTarget - playerYaw + Math.PI;
+                angle = (angle / (2 * Math.PI)) + 0.5;   // нормализуем в 0...1
+                if (angle < 0) angle += 1;
+                if (angle >= 1) angle -= 1;
+
+                int frame = (int) Math.round(angle * 32) % 32;
+                return frame / 32.0f;
+            });
+
+            // Регистрация тик-хендлера для action bar
+            MinecraftForge.EVENT_BUS.register(new Object() {
+                private String currentMessage = "";
+                private int messageTicks = 0;
+                private static final int MESSAGE_DURATION = 60; // 3 секунды (сократите до 40–50, если нужно ещё короче)
+
+                @SubscribeEvent
+                public void onClientTick(TickEvent.ClientTickEvent e) {
+                    if (e.phase != TickEvent.Phase.END) return;
+                    Minecraft mc = Minecraft.getInstance();
+                    Player player = mc.player;
+                    if (player == null) return;
+
+                    ItemStack main = player.getMainHandItem();
+                    ItemStack off = player.getOffhandItem();
+                    ItemStack held = main.getItem() instanceof TeamCompassItem ? main :
+                            (off.getItem() instanceof TeamCompassItem ? off : ItemStack.EMPTY);
+
+                    // Если компас не в руках — постепенно очищаем
+                    if (held.isEmpty()) {
+                        if (messageTicks > 0) {
+                            messageTicks--;
+                            if (messageTicks <= 0 && !currentMessage.isEmpty()) {
+                                mc.gui.setOverlayMessage(Component.empty(), false);
+                                currentMessage = "";
+                            }
+                        }
+                        return;
+                    }
+
+                    ProfileManager.Profile profile = ProfileManager.getClientProfile(player.getUUID());
+                    String newMessage;
+
+                    if (!profile.isShowOnCompass()) {
+                        newMessage = "У ВАС ВЫКЛЮЧЕН КОМАНДНЫЙ КОМПАС";
+                    } else {
+                        CompoundTag tag = held.getTag();
+                        if (tag == null || !tag.hasUUID("TrackedPlayer")) {
+                            newMessage = "Не отслеживается никто";
+                        } else {
+                            UUID tracked = tag.getUUID("TrackedPlayer");
+                            Player target = mc.level.getPlayerByUUID(tracked);
+                            String name = target != null ? target.getName().getString() : "???";
+
+                            if (target == null) {
+                                newMessage = "Отслеживается " + name + " (не загружен)";
+                            } else if (!player.level().dimension().equals(target.level().dimension())) {
+                                newMessage = "Игрок в другом измерении";
+                            } else if (player.distanceTo(target) > 5000) {
+                                newMessage = "Игрок слишком далеко";
+                            } else {
+                                newMessage = "Отслеживается " + name;
+                            }
+                        }
+                    }
+
+                    // Новое сообщение или смена статуса
+                    if (!newMessage.equals(currentMessage)) {
+                        currentMessage = newMessage;
+                        if (!profile.isShowOnCompass()) {
+                            messageTicks = -1; // постоянное
+                        } else {
+                            messageTicks = MESSAGE_DURATION;
+                        }
+                        mc.gui.setOverlayMessage(Component.literal(currentMessage), false);
+                    } else {
+                        // Таймер только для временных сообщений
+                        if (messageTicks > 0) {
+                            messageTicks--;
+                            if (messageTicks <= 0 && profile.isShowOnCompass()) {
+                                mc.gui.setOverlayMessage(Component.empty(), false);
+                                currentMessage = "";
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        private static float spinningAngle() {
+            long time = System.currentTimeMillis() % 1280L; // 1.28 сек на оборот
+            int frame = (int)(time * 32 / 1280);
+            return frame / 32.0f;
         }
     }
 

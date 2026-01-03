@@ -63,15 +63,10 @@ public class TeamSyncPacket {
                 return;
             }
 
-            UUID playerUUID = Minecraft.getInstance().player != null ? Minecraft.getInstance().player.getUUID() : null;
-
             if (pkt.teamData == null) {
                 // Удаление команды
                 TeamManager.clientTeams.remove(pkt.teamName);
-                if (playerUUID != null) {
-                    Set<String> myTeams = TeamManager.clientPlayerTeams.getOrDefault(playerUUID, new HashSet<>());
-                    myTeams.remove(pkt.teamName);
-                }
+                TeamManager.clientPlayerTeams.values().forEach(set -> set.remove(pkt.teamName));
                 System.out.println("[Client] Команда удалена: " + pkt.teamName);
             } else {
                 // Создание или обновление команды
@@ -79,13 +74,8 @@ public class TeamSyncPacket {
                 team.deserializeNBT(pkt.teamData);
                 TeamManager.clientTeams.put(pkt.teamName, team);
 
-                if (playerUUID != null) {
-                    Set<String> myTeams = TeamManager.clientPlayerTeams.computeIfAbsent(playerUUID, k -> new HashSet<>());
-                    if (team.getMembers().contains(playerUUID)) {
-                        myTeams.add(pkt.teamName);
-                    } else {
-                        myTeams.remove(pkt.teamName);
-                    }
+                for (UUID member : team.getMembers()) {
+                    TeamManager.clientPlayerTeams.computeIfAbsent(member, k -> new HashSet<>()).add(pkt.teamName);
                 }
                 System.out.println("[Client] Команда синхронизирована: " + pkt.teamName + " (members: " + team.getMembers().size() + ")");
             }

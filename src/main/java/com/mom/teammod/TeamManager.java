@@ -13,9 +13,11 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.common.util.INBTSerializable;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
+import net.minecraftforge.event.entity.living.LivingChangeTargetEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
@@ -596,11 +598,11 @@ public class TeamManager {
 
     @SubscribeEvent
     public static void onLivingAttack(LivingAttackEvent event) {
-        LivingEntity attacker = event.getSource().getEntity() instanceof LivingEntity ? (LivingEntity) event.getSource().getEntity() : null;
+        Entity sourceEntity = event.getSource().getEntity();
         LivingEntity target = event.getEntity();
 
-        if (attacker != null && isFriendlyFireDisabled(attacker, target)) {
-            event.setCanceled(true); // Блокируем урон, если FF выключен для тиммейтов или их питомцев
+        if (sourceEntity != null && isFriendlyFireDisabled(sourceEntity, target)) {
+            event.setCanceled(true);
         }
     }
 
@@ -712,6 +714,20 @@ public class TeamManager {
             player.server.submitAsync(() -> {
                 syncAllTeamsToAllPlayers();
             });
+        }
+    }
+
+    @SubscribeEvent
+    public static void onLivingChangeTarget(LivingChangeTargetEvent event) {
+        LivingEntity mob = event.getEntity();
+        LivingEntity newTarget = event.getNewTarget();
+
+        if (newTarget instanceof Player targetPlayer && mob instanceof TamableAnimal tameable && tameable.isTame()) {
+            if (tameable.getOwner() instanceof Player ownerPlayer) {
+                if (isFriendlyFireDisabled(ownerPlayer, targetPlayer)) {
+                    event.setNewTarget(null);
+                }
+            }
         }
     }
 }

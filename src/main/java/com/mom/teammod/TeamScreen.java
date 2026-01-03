@@ -2,6 +2,7 @@ package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mom.teammod.packets.RespondInvitationPacket;
+import com.mom.teammod.packets.UpdateCompassVisibilityPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
@@ -16,6 +17,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 
 import java.util.*;
+import java.util.function.BooleanSupplier;
 
 import static com.mom.teammod.TeamManager.clientPlayerTeams;
 import static com.mom.teammod.TeamManager.clientTeams;
@@ -27,10 +29,13 @@ public class TeamScreen extends BaseModScreen {
     private static final ResourceLocation PROFILE_ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/my_profile_background.png");
     private static boolean globalCompassVisible = false;
     private static boolean globalTagVisible = true;
-    public static boolean isCompassGloballyVisible() { return globalCompassVisible; }
+    private ProfileManager.Profile myProfile;
     public static boolean isTagGloballyVisible() { return globalTagVisible; }
     // Иконки из my_teams.png (координаты из CVAT)
-
+    private final BooleanSupplier compassVisibilitySupplier = () -> {
+        UUID uuid = minecraft.player.getUUID();
+        return ProfileManager.getClientProfile(uuid).isShowOnCompass();
+    };
     private static final int COMPASS_U = 15, COMPASS_V = 208, COMPASS_W = 15, COMPASS_H = 15;  // иконка компаса
     private static final int TAG_U     = 31, TAG_V     = 212, TAG_W     = 28, TAG_H     = 10;   // иконка тега
     private static final int PIMP_DOT_U = 2,  PIMP_DOT_V = 211, PIMP_DOT_W = 10, PIMP_DOT_H = 10;  // маленькая точка пимпа (вкл/выкл)
@@ -99,6 +104,7 @@ public class TeamScreen extends BaseModScreen {
     @Override
     protected void init() {
         super.init();
+        myProfile = ProfileManager.getClientProfile(minecraft.player.getUUID());
         scrollOffset = 0;
         lastRenderedScrollOffset = -1;
 
@@ -194,12 +200,18 @@ public class TeamScreen extends BaseModScreen {
             }
         });
 
-        addPimpButton(guiX + 44, guiY + 147,
+        addPimpButton(
+                guiX + 44, guiY + 147,
                 COMPASS_U, COMPASS_V, COMPASS_W, COMPASS_H,
-                -62+15, -9,
+                -62 + 15, -9,
                 Component.translatable("gui.teammod.tooltip.compass"),
-                true);
-
+                () -> {
+                    boolean newVal = !compassVisibilitySupplier.getAsBoolean();
+                    ProfileManager.getClientProfile(minecraft.player.getUUID()).setShowOnCompass(newVal);
+                    NetworkHandler.INSTANCE.sendToServer(new UpdateCompassVisibilityPacket(newVal));
+                },
+                compassVisibilitySupplier
+        );
         addPimpButton(guiX + 153, guiY + 147,
                 TAG_U, TAG_V, TAG_W, TAG_H,
                 -59, -9,
@@ -215,29 +227,35 @@ public class TeamScreen extends BaseModScreen {
                                int iconU, int iconV, int iconW, int iconH,
                                int offsetX, int offsetY,
                                Component tooltip,
-                               boolean isCompass) {
+                               boolean isCompass) {  // ← оставляем boolean isCompass
+        // Получаем профиль здесь (в init() уже есть minecraft)
+        ProfileManager.Profile profile = isCompass
+                ? ProfileManager.getClientProfile(Minecraft.getInstance().player.getUUID())
+                : null;
+
         Button button = new Button(buttonX, buttonY, 14, 14, Component.empty(), b -> {
-            if (isCompass) globalCompassVisible = !globalCompassVisible;
-            else globalTagVisible = !globalTagVisible;
+            if (isCompass) {
+                boolean newVal = !profile.isShowOnCompass();
+                profile.setShowOnCompass(newVal);
+                NetworkHandler.INSTANCE.sendToServer(new UpdateCompassVisibilityPacket(newVal));
+            } else {
+                globalTagVisible = !globalTagVisible;
+            }
         }, s -> Component.empty()) {
 
             { this.setTooltip(Tooltip.create(tooltip)); }
 
             @Override
             public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                boolean enabled = isCompass ? globalCompassVisible : globalTagVisible;
+                boolean enabled = isCompass ? profile.isShowOnCompass() : globalTagVisible;
 
-                // Подсветка при наведении (всегда видна)
                 if (isHovered()) {
                     g.fill(getX(), getY(), getX() + 14, getY() + 14, 0x30FFFFFF);
                 }
 
-                // Всё остальное рисуется ТОЛЬКО если включено
                 if (enabled) {
-                    // Точка-индикатор
                     g.blit(ATLAS, getX() + 2, getY() + 2, PIMP_DOT_U, PIMP_DOT_V, PIMP_DOT_W, PIMP_DOT_H, 256, 256);
 
-                    // Иконка со смещением
                     int iconX = getX() + 14 + 5 + offsetX;
                     int iconY = getY() + (14 - iconH) / 2 + offsetY;
                     g.blit(ATLAS, iconX, iconY, iconU, iconV, iconW, iconH, 256, 256);
@@ -301,30 +319,30 @@ public class TeamScreen extends BaseModScreen {
         return addRenderableWidget(button);
     }
 
-    private void addPimpButton(
-            int buttonX, int buttonY, int w, int h,
-            int holderGuiX, int holderGuiY, int holderWidth, int holderHeight,
-            int iconU, int iconV, int iconW, int iconH,
-            String tooltipText,
-            boolean[] enabled
-    ) {
-        Button button = new Button(buttonX, buttonY, w, h, Component.empty(), b -> {
-            enabled[0] = !enabled[0];
-        }, s -> Component.empty()) {
+    private void addPimpButton(int buttonX, int buttonY,
+                               int iconU, int iconV, int iconW, int iconH,
+                               int offsetX, int offsetY,
+                               Component tooltip,
+                               Runnable onToggle,
+                               BooleanSupplier isEnabled) {
 
-            { this.setTooltip(Tooltip.create(Component.literal(tooltipText))); }
+        Button btn = new Button(buttonX, buttonY, 14, 14, Component.empty(), b -> onToggle.run(), s -> Component.empty()) {
+            { setTooltip(Tooltip.create(tooltip)); }
 
             @Override
             public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                if (isHovered()) g.fill(getX(), getY(), getX() + w, getY() + h, 0x30FFFFFF);
+                boolean enabled = isEnabled.getAsBoolean();
 
-                if (enabled[0]) {
+                if (isHovered()) g.fill(getX(), getY(), getX() + 14, getY() + 14, 0x30FFFFFF);
+
+                if (enabled) {
                     g.blit(ATLAS, getX() + 2, getY() + 2, PIMP_DOT_U, PIMP_DOT_V, PIMP_DOT_W, PIMP_DOT_H, 256, 256);
-                    g.blit(ATLAS, getX() + w + 5, getY() + (h - iconH) / 2, iconU, iconV, iconW, iconH, 256, 256);
+                    g.blit(ATLAS, getX() + 14 + 5 + offsetX, getY() + (14 - iconH) / 2 + offsetY,
+                            iconU, iconV, iconW, iconH, 256, 256);
                 }
             }
         };
-        addRenderableWidget(button);
+        addRenderableWidget(btn);
     }
 
     // === ДЕЙСТВИЯ ===

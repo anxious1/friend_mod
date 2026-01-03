@@ -1,6 +1,40 @@
 {
-  "parent": "minecraft:item/compass",
+  "parent": "item/generated",
   "textures": {
     "layer0": "teammod:item/compass_00"
-  }
+  },
+  "overrides": [
+    { "predicate": { "teammod:angle": 0.00000 }, "model": "teammod:item/compass_00" },
+    { "predicate": { "teammod:angle": 0.03125 }, "model": "teammod:item/compass_01" },
+    { "predicate": { "teammod:angle": 0.06250 }, "model": "teammod:item/compass_02" },
+    { "predicate": { "teammod:angle": 0.09375 }, "model": "teammod:item/compass_03" },
+    { "predicate": { "teammod:angle": 0.12500 }, "model": "teammod:item/compass_04" },
+    { "predicate": { "teammod:angle": 0.15625 }, "model": "teammod:item/compass_05" },
+    { "predicate": { "teammod:angle": 0.18750 }, "model": "teammod:item/compass_06" },
+    { "predicate": { "teammod:angle": 0.21875 }, "model": "teammod:item/compass_07" },
+    { "predicate": { "teammod:angle": 0.25000 }, "model": "teammod:item/compass_08" },
+    { "predicate": { "teammod:angle": 0.28125 }, "model": "teammod:item/compass_09" },
+    { "predicate": { "teammod:angle": 0.31250 }, "model": "teammod:item/compass_10" },
+    { "predicate": { "teammod:angle": 0.34375 }, "model": "teammod:item/compass_11" },
+    { "predicate": { "teammod:angle": 0.37500 }, "model": "teammod:item/compass_12" },
+    { "predicate": { "teammod:angle": 0.40625 }, "model": "teammod:item/compass_13" },
+    { "predicate": { "teammod:angle": 0.43750 }, "model": "teammod:item/compass_14" },
+    { "predicate": { "teammod:angle": 0.46875 }, "model": "teammod:item/compass_15" },
+    { "predicate": { "teammod:angle": 0.50000 }, "model": "teammod:item/compass_16" },
+    { "predicate": { "teammod:angle": 0.53125 }, "model": "teammod:item/compass_17" },
+    { "predicate": { "teammod:angle": 0.56250 }, "model": "teammod:item/compass_18" },
+    { "predicate": { "teammod:angle": 0.59375 }, "model": "teammod:item/compass_19" },
+    { "predicate": { "teammod:angle": 0.62500 }, "model": "teammod:item/compass_20" },
+    { "predicate": { "teammod:angle": 0.65625 }, "model": "teammod:item/compass_21" },
+    { "predicate": { "teammod:angle": 0.68750 }, "model": "teammod:item/compass_22" },
+    { "predicate": { "teammod:angle": 0.71875 }, "model": "teammod:item/compass_23" },
+    { "predicate": { "teammod:angle": 0.75000 }, "model": "teammod:item/compass_24" },
+    { "predicate": { "teammod:angle": 0.78125 }, "model": "teammod:item/compass_25" },
+    { "predicate": { "teammod:angle": 0.81250 }, "model": "teammod:item/compass_26" },
+    { "predicate": { "teammod:angle": 0.84375 }, "model": "teammod:item/compass_27" },
+    { "predicate": { "teammod:angle": 0.87500 }, "model": "teammod:item/compass_28" },
+    { "predicate": { "teammod:angle": 0.90625 }, "model": "teammod:item/compass_29" },
+    { "predicate": { "teammod:angle": 0.93750 }, "model": "teammod:item/compass_30" },
+    { "predicate": { "teammod:angle": 0.96875 }, "model": "teammod:item/compass_31" }
+  ]
 }
