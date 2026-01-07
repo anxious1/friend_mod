@@ -98,8 +98,8 @@ public class TeamsListScreen extends BaseModScreen {
 
         allTeams.clear();
         for (TeamManager.Team team : TeamManager.clientTeams.values()) {
-            // НЕ показываем команды, в которых игрок уже состоит
-            if (!myTeams.contains(team.getName())) {
+            // Показываем только чужие команды с открытым доступом
+            if (!myTeams.contains(team.getName()) && !team.isInviteOnly()) {
                 allTeams.add(new TeamEntry(team, false));
             }
         }
@@ -324,5 +324,9 @@ public class TeamsListScreen extends BaseModScreen {
             this.team = team;
             this.isMember = isMember;
         }
+    }
+
+    public void refreshFromSync() {
+        this.refreshTeamList();
     }
 }

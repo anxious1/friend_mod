@@ -98,6 +98,10 @@ public class TeamSyncPacket {
                 otherScreen.refreshFromSync();
             }
 
+            if (current instanceof TeamsListScreen listScreen) {
+                listScreen.refreshFromSync();
+            }
+
             if (current instanceof TeamProfileOwner ownerScreen) {
                 ownerScreen.refreshFromSync();
             }

@@ -30,25 +30,34 @@ public class LeaveTeamPacket {
     }
 
     public static void handle(LeaveTeamPacket pkt, Supplier<NetworkEvent.Context> ctx) {
-
         ctx.get().enqueueWork(() -> {
             LastActivityTracker.update(ctx.get().getSender().getUUID());
             UUID leaverUUID = ctx.get().getSender().getUUID();
 
-            if (TeamManager.leaveTeam(pkt.teamName, leaverUUID)) {
-                // Отправляем обновление ВСЕМ (включая вышедшего)
-                TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName);
-                MinecraftServer server = ctx.get().getSender().getServer();
-                if (server != null) {
-                    server.getPlayerList().getPlayers().forEach(p ->
-                            NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> p), syncPacket)
-                    );
-                }
+            // выходим из команды
+            TeamManager.Team team = TeamManager.leaveTeamReturnTeam(pkt.teamName, leaverUUID);
+            if (team == null) return;               // команды не было или игрок не в ней
+            MinecraftServer server = ctx.get().getSender().getServer();
+            if (server == null) return;
 
-                // ВАЖНО: НИЧЕГОСЯ НЕ ВЫЗЫВАЕМ returnToTeamScreen() ЗДЕСЬ!
-                // Клиент сам закроет профиль и обновит список через TeamSyncPacket
+            /* 1.  Если команда расформировалась – шлём всем пакет-удаление */
+            if (team.getMembers().isEmpty()) {
+                TeamSyncPacket delPacket = new TeamSyncPacket(pkt.teamName); // data = null
+                server.getPlayerList().getPlayers().forEach(p ->
+                        NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> p), delPacket));
+                return;
             }
+
+            /* 2.  Команда жива – шлём всем обновлённые данные */
+            TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName, team.serializeNBT());
+            server.getPlayerList().getPlayers().forEach(p ->
+                    NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> p), syncPacket));
         });
+        // ===== ОЧИСТКА КЛИЕНТСКОГО КЭША у вышедшего =====
+        NetworkHandler.INSTANCE.send(
+                PacketDistributor.PLAYER.with(() -> ctx.get().getSender()),
+                new TeamSyncPacket(pkt.teamName)   // null-данные = "удали у себя"
+        );
         ctx.get().setPacketHandled(true);
     }
 }

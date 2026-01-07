@@ -104,5 +104,5 @@
   "gui.teammod.member.members": "Участников: %d",
   "gui.teammod.member.online": "В сети: %d",
   "gui.teammod.member.leave": "Покинуть команду",
-  "gui.teammod.tooltip.team_quests": "Прогресс команды по квестам: %d/%d выполнено (%d%%)"
+  "gui.teammod.tooltip.team_quests": "Средний % выполненных квестов в команде: %d%%"
 }

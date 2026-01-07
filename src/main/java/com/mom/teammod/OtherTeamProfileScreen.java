@@ -68,7 +68,10 @@ public class OtherTeamProfileScreen extends BaseModScreen {
     private static final int LEADER_V = 246;
     private static final int LEADER_W = 32;
     private static final int LEADER_H = 7;
-
+    private static final int ZAMOK_U = 158;   // xtl
+    private static final int ZAMOK_V = 170;   // ytl
+    private static final int ZAMOK_W = 9;     // xbr - xtl
+    private static final int ZAMOK_H = 11;
     private final List<Button> playerButtons = new ArrayList<>();
     private int scrollOffset = 0;
     private boolean isDraggingScroller = false;
@@ -320,42 +323,50 @@ public class OtherTeamProfileScreen extends BaseModScreen {
         return addRenderableWidget(btn);
     }
 
+    // Старый метод полностью
     private void addJoinTeamButton(int x, int y, int w, int h) {
-        // Удаляем старую кнопку
-        if (joinButton != null) {
-            removeWidget(joinButton);
-            joinButton = null;
-        }
+        if (joinButton != null) removeWidget(joinButton);
 
         TeamManager.Team team = TeamManager.clientTeams.get(teamName);
         if (team == null) return;
 
-        joinButton = new Button(x, y, JOIN_TEAM_W, JOIN_TEAM_H, Component.empty(), b -> {
+        int newX = x - 3;              // ← 3 px левее
+        int newW = JOIN_TEAM_W;
+        int newH = JOIN_TEAM_H + 2;    // ← на 2 px выше
+
+        joinButton = new Button(newX, y, newW, newH, Component.empty(), b -> {
             if (!team.isInviteOnly()) {
                 NetworkHandler.INSTANCE.sendToServer(new JoinTeamPacket(teamName));
             }
         }, s -> Component.empty()) {
-            {
-                if (team.isInviteOnly()) {
-                    setTooltip(Tooltip.create(Component.literal(
-                            "§cКоманда закрыта\nВступить можно только по приглашению лидера")));
-                } else {
-                    setTooltip(Tooltip.create(Component.literal("Вступить в команду")));
-                }
-            }
+
+            { setTooltip(Tooltip.create(
+                    team.isInviteOnly()
+                            ? Component.literal("§cКоманда закрыта\nВступить можно только по приглашению лидера")
+                            : Component.literal("Вступить в команду"))); }
 
             @Override
             public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                /* ---------- кнопка ---------- */
                 if (team.isInviteOnly()) {
-                    // Полностью прозрачно
-                    return;
+                    // закрытая — рисуем текстуру
+                    RenderSystem.setShaderTexture(0, ATLAS);
+                    g.blit(ATLAS, getX() + 5 , getY() - 1, JOIN_TEAM_U, JOIN_TEAM_V, JOIN_TEAM_W, JOIN_TEAM_H, 256, 256);
+                } else {
+                    // открытая — только ховер
+                    if (isHovered()) {
+                        g.fill(getX() + 4, getY() - 2 , getX() + width + 6, getY() + height -1, 0x30FFFFFF);
+                    }
                 }
 
-                RenderSystem.setShaderTexture(0, ATLAS);
-                g.blit(ATLAS, getX(), getY(), JOIN_TEAM_U, JOIN_TEAM_V, JOIN_TEAM_W, JOIN_TEAM_H, 256, 256);
-
-                if (isHovered()) {
-                    g.fill(getX(), getY(), getX() + JOIN_TEAM_W, getY() + JOIN_TEAM_H, 0x30FFFFFF);
+                /* ---------- замочек ---------- */
+                if (team.isInviteOnly()) {
+                    int lockX = getX() + width + 2;   // правее кнопки на 2 px
+                    int lockY = getY();
+                    int lockW = ZAMOK_W;
+                    int lockH = height;               // та же высота, что и кнопка
+                    RenderSystem.setShaderTexture(0, ATLAS);
+                    g.blit(ATLAS, lockX + 7, lockY -2, ZAMOK_U, ZAMOK_V, lockW, lockH, 256, 256);
                 }
             }
         };
@@ -429,11 +440,25 @@ public class OtherTeamProfileScreen extends BaseModScreen {
                     SCROLL_U, SCROLL_V, SCROLL_W, SCROLL_H, 256, 256);
         }
 
-        // XP бар (чуть ниже списка игроков)
+        // ==== КОМАНДНЫЙ ПРОГРЕСС (средний % квестов) ====
         int xpBarX = guiX + 10 + 21 - 9 - 7;
         int xpBarY = guiY + 42 + 20 + 4 + 15 + (3 * (ONLINE_H + 1)) + 5 + 13;
-        g.blit(ATLAS, xpBarX, xpBarY, XP_BAR_U, XP_BAR_V, XP_BAR_W, XP_BAR_H, 256, 256);
 
+        int avgProgress = TeamQuestHelper.getTeamAverageQuestProgress(teamName);
+        int fillWidth   = (int)(XP_BAR_W * avgProgress / 100.0);
+
+        // фон
+        g.blit(ATLAS, xpBarX, xpBarY, XP_BAR_U, XP_BAR_V, XP_BAR_W, XP_BAR_H, 256, 256);
+        // заполнение
+        g.blit(ATLAS, xpBarX, xpBarY, XP_BAR_U, XP_BAR_V + XP_BAR_H, fillWidth, XP_BAR_H, 256, 256);
+
+        // тултип: всегда одно число – avgProgress
+        if (mouseX >= xpBarX && mouseX <= xpBarX + XP_BAR_W &&
+                mouseY >= xpBarY && mouseY <= xpBarY + XP_BAR_H) {
+            g.renderTooltip(font,
+                    Component.translatable("gui.teammod.tooltip.team_quests", avgProgress),
+                    mouseX, mouseY);
+        }
         super.render(g, mouseX, mouseY, partialTick);
     }
 

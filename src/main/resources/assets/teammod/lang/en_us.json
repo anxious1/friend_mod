@@ -104,5 +104,5 @@
   "gui.teammod.member.members": "Members: %d",
   "gui.teammod.member.online": "Online: %d",
   "gui.teammod.member.leave": "Leave Team",
-  "gui.teammod.tooltip.team_quests": "Team Quest Progress: %d/%d completed (%d%%)"
+  "gui.teammod.tooltip.team_quests": "Team average % quest progress: %d%%"
 }

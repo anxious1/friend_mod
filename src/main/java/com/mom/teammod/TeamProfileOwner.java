@@ -349,7 +349,25 @@ public class TeamProfileOwner extends BaseModScreen {
             }
         }
 
-        renderTeamQuestProgressBar(g, guiX, guiY);
+        // ==== ЕДИНЫЙ КРАСИВЫЙ ПРОГРЕСС (как в TeamMemberScreen) ====
+        int xpBarX = guiX + 10 + 21 - 9 - 7;
+        int xpBarY = guiY + 42 + 20 + 4 + 15 + (3 * (ONLINE_H + 1)) + 5 + 13;
+
+        int avgProgress = TeamQuestHelper.getTeamAverageQuestProgress(teamName);
+        int fillWidth   = (int)(TEAM_BAR_W * avgProgress / 100.0);
+
+        // фон
+        g.blit(ATLAS, xpBarX, xpBarY, TEAM_BAR_U, TEAM_BAR_V, TEAM_BAR_W, TEAM_BAR_H, 256, 256);
+        // заполнение
+        g.blit(ATLAS, xpBarX, xpBarY, TEAM_BAR_U, TEAM_BAR_V + TEAM_BAR_H, fillWidth, TEAM_BAR_H, 256, 256);
+
+        // тултип: всегда одно число – avgProgress
+        if (mouseX >= xpBarX && mouseX <= xpBarX + TEAM_BAR_W &&
+                mouseY >= xpBarY && mouseY <= xpBarY + TEAM_BAR_H) {
+            g.renderTooltip(font,
+                    Component.translatable("gui.teammod.tooltip.team_quests", avgProgress),
+                    mouseX, mouseY);
+        }
         super.render(g, mouseX, mouseY, partialTick);
     }
 
@@ -461,40 +479,5 @@ public class TeamProfileOwner extends BaseModScreen {
         if (memberCount == 0 || totalQuests == 0) return 0;
 
         return (totalCompleted * 100) / totalQuests;
-    }
-
-    private void renderTeamQuestProgressBar(GuiGraphics g, int guiX, int guiY) {
-        int x = guiX + 10; // Примерные координаты
-        int y = guiY + 140;
-
-        int progress = getTeamAverageQuestProgress();
-        int fillWidth = (int) (TEAM_BAR_W * progress / 100.0);
-
-        // Рисуем фон бара
-        g.blit(ATLAS, x, y, TEAM_BAR_U, TEAM_BAR_V, TEAM_BAR_W, TEAM_BAR_H, 256, 256);
-
-        // Рисуем заполнение
-        g.blit(ATLAS, x, y, TEAM_BAR_U, TEAM_BAR_V + TEAM_BAR_H, fillWidth, TEAM_BAR_H, 256, 256);
-
-        // Тултип при наведении
-        int mouseX = (int) minecraft.mouseHandler.xpos();
-        int mouseY = (int) minecraft.mouseHandler.ypos();
-
-        if (mouseX >= x && mouseX <= x + TEAM_BAR_W && mouseY >= y && mouseY <= y + TEAM_BAR_H) {
-            TeamManager.Team team = TeamManager.getTeam(teamName);
-            int totalCompleted = 0;
-            int totalQuests = 0;
-
-            if (team != null) {
-                for (UUID memberUUID : team.getMembers()) {
-                    totalCompleted += FTBQuestsStats.getCompletedQuests(memberUUID);
-                    totalQuests += FTBQuestsStats.getTotalQuests();
-                }
-            }
-
-            g.renderTooltip(font,
-                    Component.translatable("gui.teammod.tooltip.team_quests", totalCompleted, totalQuests, progress),
-                    mouseX, mouseY);
-        }
     }
 }

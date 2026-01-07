@@ -466,10 +466,25 @@ public class TeamMemberScreen extends BaseModScreen {
                 SCROLL_U, SCROLL_V, SCROLL_W, SCROLL_H, 256, 256);
 
         // 8. XP БАР
+        // ==== КОМАНДНЫЙ ПРОГРЕСС (средний % квестов) ====
         int xpBarX = guiX + 10 + 21 - 9 - 7;
         int xpBarY = guiY + 42 + 20 + 4 + 15 + (3 * (ONLINE_H + 1)) + 5 + 13;
-        g.blit(ATLAS, xpBarX, xpBarY, XP_BAR_U, XP_BAR_V, XP_BAR_W, XP_BAR_H, 256, 256);
 
+        int avgProgress = TeamQuestHelper.getTeamAverageQuestProgress(teamName);
+        int fillWidth   = (int)(XP_BAR_W * avgProgress / 100.0);
+
+        // фон
+        g.blit(ATLAS, xpBarX, xpBarY, XP_BAR_U, XP_BAR_V, XP_BAR_W, XP_BAR_H, 256, 256);
+        // заполнение
+        g.blit(ATLAS, xpBarX, xpBarY, XP_BAR_U, XP_BAR_V + XP_BAR_H, fillWidth, XP_BAR_H, 256, 256);
+
+        // тултип: всегда одно число – avgProgress
+        if (mouseX >= xpBarX && mouseX <= xpBarX + XP_BAR_W &&
+                mouseY >= xpBarY && mouseY <= xpBarY + XP_BAR_H) {
+            g.renderTooltip(font,
+                    Component.translatable("gui.teammod.tooltip.team_quests", avgProgress),
+                    mouseX, mouseY);
+        }
         // 9. КНОПКИ
         super.render(g, mouseX, mouseY, partialTick);
     }

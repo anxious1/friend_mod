@@ -385,6 +385,7 @@ public class TeamManager {
 
         if (team.getMembers().isEmpty()) {
             teams.remove(teamName);
+            syncTeamToAll(teamName);
         }
 
         sendAchievementToTeam(teamName, "Участник покинул команду", "Игрок §f" + (player != null ? player.getName().getString() : "неизвестно") + " покинул команду", "BARRIER", false);
@@ -393,6 +394,52 @@ public class TeamManager {
         syncTeamToAll(teamName);
 
         return true;
+    }
+
+    public static Team leaveTeamReturnTeam(String teamName, UUID playerUUID) {
+        TeamWorldData data = getData();
+        if (data == null) return null;
+
+        Map<String, Team> teams = data.getTeams();
+        Map<UUID, Set<String>> playerTeams = data.getPlayerTeams();
+
+        Team team = teams.get(teamName);
+        if (team == null || !team.getMembers().contains(playerUUID)) return null;
+
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        ServerPlayer player = server != null ? server.getPlayerList().getPlayer(playerUUID) : null;
+
+        boolean wasOwner = team.getOwner().equals(playerUUID);
+        boolean teamWillBeDisbanded = team.getMembers().size() == 1;
+
+        /* передача лидерства, если нужно */
+        if (wasOwner && !teamWillBeDisbanded) {
+            UUID newOwner = team.getMembers().stream()
+                    .filter(uuid -> !uuid.equals(playerUUID))
+                    .findFirst()
+                    .orElse(null);
+            if (newOwner != null) {
+                team.owner = newOwner;
+                ServerPlayer newOwnerPlayer = server.getPlayerList().getPlayer(newOwner);
+                if (newOwnerPlayer != null) {
+                    newOwnerPlayer.sendSystemMessage(
+                            Component.literal("§aВы стали новым лидером команды §f" + teamName));
+                }
+            }
+        }
+
+        /* удаляем игрока */
+        team.removeMember(playerUUID);
+        playerTeams.computeIfAbsent(playerUUID, k -> new HashSet<>()).remove(teamName);
+
+        /* сообщения */
+        if (player != null) {
+            player.sendSystemMessage(
+                    Component.literal("§aВы покинули команду §f" + teamName));
+        }
+
+        data.setDirty(true);
+        return team;   // важно: возвращаем объект команды
     }
 
     public static boolean kickPlayer(String teamName, UUID targetUUID, UUID kickerUUID) {
@@ -432,6 +479,8 @@ public class TeamManager {
         // Команда удаляется ТОЛЬКО если в ней не осталось участников
         if (team.getMembers().isEmpty()) {
             teams.remove(teamName);
+            data.setDirty(true);
+            syncTeamToAll(teamName);
         }
 
         data.setDirty(true);

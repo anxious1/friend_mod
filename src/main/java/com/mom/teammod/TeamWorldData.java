@@ -45,6 +45,11 @@ public class TeamWorldData extends SavedData {
 
             TeamManager.Team team = new TeamManager.Team(teamName, null);
             team.deserializeNBT(teamTag);
+            // ➜ НЕ ВОССТАНАВЛИВАЕМ ПУСТЫЕ КОМАНДЫ
+            if (team.getMembers().isEmpty()) {
+                System.out.println("[TeamWorldData] Пропуск пустой команды: " + teamName);
+                continue;
+            }
             teams.put(teamName, team);
         }
 
