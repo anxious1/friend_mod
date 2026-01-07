@@ -12,11 +12,13 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.client.player.RemotePlayer;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.simpleraces.network.SimpleracesModVariables;
 
 import java.util.Comparator;
 
@@ -95,8 +97,8 @@ public class OtherPlayerProfileScreen extends BaseModScreen {
         this.parentScreen = parentScreen;
 
         // Получаем тестовые данные
-        this.playerStatus = OtherPlayerState.getStatus(targetPlayerId);
-        this.playerName = playerStatus.name; // Всегда используем тестовое имя
+        ProfileManager.Profile profile = ProfileManager.getClientProfile(targetPlayerId);
+        NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(targetPlayerId));
     }
 
     private InviteButtonState getInviteButtonState() {
@@ -113,6 +115,21 @@ public class OtherPlayerProfileScreen extends BaseModScreen {
             return InviteButtonState.INVITE_OFF;     // TOPSON - текстура invite_off, НЕТ кнопки (2)
         }
         return InviteButtonState.NONE;
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        ProfileManager.Profile prof = ProfileManager.getClientProfile(targetPlayerId);
+        if ("Unknown".equals(prof.getGameProfile().getName())) {
+            // ещё не пришло – повторно запросим (на всякий случай)
+            NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(targetPlayerId));
+        } else {
+            // обновляем имя и перерисовываем
+            if ("Unknown".equals(playerName)) {
+                playerName = prof.getGameProfile().getName();
+            }
+        }
     }
 
     @Override
@@ -395,21 +412,13 @@ public class OtherPlayerProfileScreen extends BaseModScreen {
     }
 
     private void renderStatusIcon(GuiGraphics g) {
-        // Определяем статус игрока
-        Player targetPlayer = minecraft.level.getPlayerByUUID(targetPlayerId);
-        boolean isOnline = targetPlayer != null;
+        byte st = ClientPlayerCache.getRawStatus(targetPlayerId);
+        int u = switch (st) {
+            case 1  -> ONLINE_U;
+            case 2  -> AFK_U;
+            default -> OFFLINE_U;
+        };
 
-        int u;
-        if (!isOnline) {
-            u = OFFLINE_U; // Оффлайн
-        } else {
-            // Если онлайн — проверяем AFK по последнему вводу (как в MyProfileScreen)
-            long timeSinceLastInput = System.currentTimeMillis() - lastInputTime.get();
-            boolean isAfk = timeSinceLastInput >= AFK_THRESHOLD;
-            u = isAfk ? AFK_U : ONLINE_U;
-        }
-
-        // Позиции — точно те же, что в MyProfileScreen (не меняем ни пикселя!)
         int baseX = (width - GUI_WIDTH) / 2;
         int baseY = (height - GUI_HEIGHT) / 2;
         int drawX = baseX + 88 - 2 + 1 - 2;
@@ -423,35 +432,55 @@ public class OtherPlayerProfileScreen extends BaseModScreen {
         int frameY = (height - GUI_HEIGHT) / 2 + (GUI_HEIGHT - SKIN_FRAME_HEIGHT) / 2 - 13;
         int playerX = frameX + SKIN_FRAME_WIDTH / 2;
         int playerY = frameY + SKIN_FRAME_HEIGHT - 10;
-        Player targetPlayer = minecraft.level.getPlayerByUUID(targetPlayerId);
 
-        if (targetPlayer != null && targetPlayer.isAlive()) {
-            // Игрок в сети - обновляем экипировку
-            updatePlayerEquipment(targetPlayerId);
+        Player realPlayer = minecraft.level.getPlayerByUUID(targetPlayerId);
+        ProfileManager.Profile profile = ProfileManager.getClientProfile(targetPlayerId);
 
-            // Рисуем игрока с текущей экипировкой
-            InventoryScreen.renderEntityInInventoryFollowsMouse(
-                    g, playerX, playerY, 30, (float) playerX - mx,
-                    (float) (frameY + 50) - my, targetPlayer);
-        } else if (hasSeenPlayer) {
-            // Игрок не в сети, но мы его видели - рисуем с последней экипировкой
-            // Создаем временного игрока с сохраненной экипировкой
-            Player tempPlayer = new RemotePlayer(minecraft.level, new GameProfile(targetPlayerId, playerName));
-
-            // Надеваем сохраненную экипировку
+        /* 1. Игрок онлайн – рисуем живого, обновляем кэш */
+        if (realPlayer != null && realPlayer.isAlive()) {
+            ItemStack[] equipment = new ItemStack[4];
             for (int i = 0; i < 4; i++) {
-                tempPlayer.setItemSlot(EquipmentSlot.byTypeAndIndex(EquipmentSlot.Type.ARMOR, i), lastSeenEquipment[i]);
+                equipment[i] = realPlayer.getItemBySlot(EquipmentSlot.byTypeAndIndex(EquipmentSlot.Type.ARMOR, i)).copy();
+            }
+            ClientPlayerCache.onPlayerSeen(targetPlayerId, realPlayer.getGameProfile(), equipment);
+            profile.setGameProfile(realPlayer.getGameProfile());
+            profile.setLastEquipment(equipment);
+
+            InventoryScreen.renderEntityInInventoryFollowsMouse(
+                    g, playerX, playerY, 38,
+                    (float) playerX - mx,
+                    (float) (frameY + SKIN_FRAME_HEIGHT / 2) - my,
+                    realPlayer);
+            return;
+        }
+
+        /* 2. Оффлайн, но уже встречали – берём данные из кэша */
+        if (ClientPlayerCache.hasMet(targetPlayerId)) {
+            GameProfile gp = ClientPlayerCache.getGameProfile(targetPlayerId);
+            ItemStack[] equipment = ClientPlayerCache.getLastEquipment(targetPlayerId);
+
+            Player temp = new RemotePlayer(minecraft.level, gp);
+            for (int i = 0; i < 4; i++) {
+                temp.setItemSlot(EquipmentSlot.byTypeAndIndex(EquipmentSlot.Type.ARMOR, i), equipment[i]);
             }
 
             InventoryScreen.renderEntityInInventoryFollowsMouse(
-                    g, playerX, playerY, 30, (float) playerX - mx,
-                    (float) (frameY + 50) - my, tempPlayer);
-        } else {
-            // Игрока никогда не видели - рисуем только скин
-            InventoryScreen.renderEntityInInventoryFollowsMouse(
-                    g, playerX, playerY, 30, (float) playerX - mx,
-                    (float) (frameY + 50) - my, minecraft.player);
+                    g, playerX, playerY, 38,
+                    (float) playerX - mx,
+                    (float) (frameY + SKIN_FRAME_HEIGHT / 2) - my,
+                    temp);
+            return;
         }
+
+        /* 3. Никогда не встречались – рисуем default-скин, но ник берём из профиля */
+        GameProfile unknown = new GameProfile(targetPlayerId, profile.getGameProfile().getName());
+        Player temp = new RemotePlayer(minecraft.level, unknown);
+
+        InventoryScreen.renderEntityInInventoryFollowsMouse(
+                g, playerX, playerY, 38,
+                (float) playerX - mx,
+                (float) (frameY + SKIN_FRAME_HEIGHT / 2) - my,
+                temp);
     }
 
     private void renderNickname(GuiGraphics g) {
@@ -492,13 +521,30 @@ public class OtherPlayerProfileScreen extends BaseModScreen {
         int baseX = (width - GUI_WIDTH) / 2;
         int baseY = (height - GUI_HEIGHT) / 2;
 
-        // Иконка Human
-        g.blit(ATLAS, baseX + 111 + 41 - 74 - 20 - 20 - 18, baseY + 96 + 123 - 194 + 5 + 5,
-                HUMAN_U, HUMAN_V, HUMAN_W, HUMAN_H, 256, 256);
+        ProfileManager.Profile profile = ProfileManager.getClientProfile(targetPlayerId);
+        String raceLabel = profile.getRace().isEmpty() ? "Human" : profile.getRace();
+        int raceU = switch (raceLabel) {
+            case "aracha"   -> 1;
+            case "dragon"   -> 11;
+            case "dwarf"    -> 21;
+            case "elf"      -> 31;
+            case "fairy"    -> 41;
+            case "halfdead" -> 51;
+            case "merfolk"  -> 61;
+            case "orc"      -> 71;
+            case "serpentin"-> 81;
+            case "werewolf" -> 91;
+            default         -> HUMAN_U;
+        };
 
-        int textX = getHumanTextX("Human");
+        // рисуем иконку и текст
+        g.blit(ATLAS, baseX + 111 + 41 - 74 - 20 - 20 - 18,
+                baseY + 96 + 123 - 194 + 5 + 5,
+                raceU, HUMAN_V, HUMAN_W, HUMAN_H, 256, 256);
+
+        int textX = getHumanTextX(raceLabel);
         int textY = baseY + 96 + 2;
-        g.drawString(font, "Human", textX, textY, 0xFFFFFF, false);
+        g.drawString(font, raceLabel, textX, textY, 0xFFFFFF, false);
     }
 
     // Остальные методы копируются из MyProfileScreen без изменений
@@ -736,15 +782,10 @@ public class OtherPlayerProfileScreen extends BaseModScreen {
 
     @Override
     public boolean keyPressed(int key, int scan, int mod) {
-        lastInputTime.set(System.currentTimeMillis());
-        if (key == 256) { // ESC
-            if (parentScreen != null) {
-                minecraft.setScreen(parentScreen);
-                return true;
-            }
-        }
+        ClientPlayerCache.updateInputTime();
         return super.keyPressed(key, scan, mod);
     }
+
 
     @Override
     public boolean charTyped(char c, int mod) {

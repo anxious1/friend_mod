@@ -1,7 +1,9 @@
 package com.mom.teammod;
 
+import com.mojang.authlib.GameProfile;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mom.teammod.packets.DeleteTeamPacket;
+import com.mom.teammod.packets.RequestProfilePacket;
 import com.mom.teammod.packets.SetInviteOnlyPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -13,6 +15,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import org.checkerframework.checker.signature.qual.Identifier;
 
 
@@ -81,7 +84,23 @@ public class TeamProfileOwner extends BaseModScreen {
     private static final int LEADER_W = 32;
     private static final int LEADER_H = 7;
     private final List<Button> playerButtons = new ArrayList<>();
-
+    /* --------------- ХЕЛПЕРЫ ДЛЯ КЕША --------------- */
+    /* внутри хелпера getNameSafe() */
+    private String getNameSafe(UUID id) {
+        GameProfile gp = ClientPlayerCache.getGameProfile(id);
+        if (gp == null || "Unknown".equals(gp.getName())) {
+            // Запрашиваем у сервера
+            NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(id));
+            return "Loading..."; // или вернуть временно "Unknown", но не хранить это
+        }
+        return gp.getName();
+    }
+    private boolean isOnline(UUID id) {
+        return ClientPlayerCache.isOnline(id);
+    }
+    private GameProfile getProfileSafe(UUID id){
+        return ClientPlayerCache.getGameProfile(id);
+    }
     private int scrollOffset = 0;
     private boolean isDraggingScroller = false;
 
@@ -104,12 +123,11 @@ public class TeamProfileOwner extends BaseModScreen {
     private int[] getOnlineAndTotalPlayers() {
         TeamManager.Team team = TeamManager.clientTeams.get(teamName);
         if (team == null) return new int[]{0, 0};
-        Set<UUID> members = team.getMembers();
-        int online = 0;
-        for (UUID id : members) {
-            if (minecraft.level.getPlayerByUUID(id) != null) online++;
-        }
-        return new int[]{online, members.size()};
+        long online = team.getMembers()
+                .stream()
+                .filter(ClientPlayerCache::isOnline)
+                .count();
+        return new int[]{(int) online, team.getMembers().size()};
     }
 
     @Override
@@ -154,55 +172,65 @@ public class TeamProfileOwner extends BaseModScreen {
         // Создаём кнопки для всех участников
         for (int i = 0; i < members.size(); i++) {
             UUID playerId = members.get(i);
-            Player player = minecraft.level != null ? minecraft.level.getPlayerByUUID(playerId) : null;
 
-            String name = player != null ? player.getName().getString() : "Неизвестно";
-            boolean online = player != null;
-            boolean isOwner = playerId.equals(ownerId);
+            String name = getNameSafe(playerId);
+            if ("Loading...".equals(name)) {
+                ClientPlayerCache.loadQueue.offer(playerId);
+            }
+            boolean online   = isOnline(playerId);             // ONLINE / AFK / OFFLINE
+            boolean isOwner  = playerId.equals(ownerId);
 
-            // Начальная позиция — все кнопки "сверху", скролл сдвинет
             int buttonY = baseY + 20 + 4 + i * slotHeight;
 
-            final String finalName = name;
             final UUID finalPlayerId = playerId;
+            final String finalName   = name;
 
             Button playerButton = new Button(cellX, buttonY, ONLINE_W, ONLINE_H,
                     Component.empty(), b -> {
                 if (finalPlayerId.equals(minecraft.player.getUUID())) {
-                    minecraft.setScreen(new MyProfileScreen(TeamProfileOwner.this, Component.translatable("gui.teammod.profile")));
+                    minecraft.setScreen(new MyProfileScreen(TeamProfileOwner.this,
+                            Component.translatable("gui.teammod.profile")));
                 } else {
-                    minecraft.setScreen(new OtherPlayerProfileScreen(TeamProfileOwner.this, finalPlayerId, Component.literal("Профиль " + finalName)));
+                    minecraft.setScreen(new OtherPlayerProfileScreen(TeamProfileOwner.this,
+                            finalPlayerId, Component.literal("Профиль " + finalName)));
                 }
             }, s -> Component.empty()) {
+
                 @Override
                 public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
                     if (!this.visible) return;
 
-                    int bgV = online ? ONLINE_V : 175;
+                    /* фон слота */
+                    int bgV = online ? ONLINE_V : 175;           // 175 – ваша «оффлайн»-секция в атласе
                     g.blit(ATLAS, getX(), getY(), ONLINE_U, bgV, ONLINE_W, ONLINE_H, 256, 256);
 
-                    ResourceLocation skin = minecraft.getSkinManager().getInsecureSkinLocation(
-                            player != null ? player.getGameProfile() : minecraft.player.getGameProfile());
-
+                    /* голова */
+                    ResourceLocation skin = minecraft.getSkinManager()
+                            .getInsecureSkinLocation(getProfileSafe(finalPlayerId));
                     int headX = getX() + 3;
                     int headY = getY() + (ONLINE_H - 8) / 2;
                     g.blit(skin, headX, headY, 8, 8, 8, 8, 8, 8, 64, 64);
                     RenderSystem.enableBlend();
-                    g.blit(skin, headX, headY, 8, 8, 40, 8, 8, 8, 64, 64);
+                    g.blit(skin, headX, headY, 40, 8, 8, 8, 64, 64);
                     RenderSystem.disableBlend();
 
-                    String tagPart = (showTag && teamTag != null && !teamTag.isEmpty()) ? "[" + teamTag + "]" : "";
+                    /* ник + тег */
+                    String tagPart = (showTag && teamTag != null && !teamTag.isEmpty())
+                            ? "[" + teamTag + "]" : "";
                     String fullText = finalName + tagPart;
                     if (font.width(fullText) > ONLINE_W - 22) {
                         fullText = font.plainSubstrByWidth(fullText, ONLINE_W - 25) + "..";
                     }
                     g.drawString(font, fullText, getX() + 14, getY() + 4, 0xFFFFFF, false);
 
+                    /* корона у лидера */
                     if (isOwner) {
-                        g.blit(ATLAS, getX() + ONLINE_W - LEADER_W - 2, getY() + ONLINE_H - LEADER_H - 1,
+                        g.blit(ATLAS, getX() + ONLINE_W - LEADER_W - 2,
+                                getY() + ONLINE_H - LEADER_H - 1,
                                 LEADER_U, LEADER_V, LEADER_W, LEADER_H, 256, 256);
                     }
 
+                    /* ховер */
                     if (isHovered()) {
                         g.fill(getX(), getY(), getX() + width, getY() + height, 0x30FFFFFF);
                     }
@@ -211,6 +239,8 @@ public class TeamProfileOwner extends BaseModScreen {
 
             playerButtons.add(playerButton);
             addRenderableWidget(playerButton);
+            playerButton.setTooltip(Tooltip.create(
+                    Component.translatable("gui.teammod.member.view_profile")));
         }
 
         updateVisibleButtons();
@@ -254,16 +284,6 @@ public class TeamProfileOwner extends BaseModScreen {
                 }
             }
         });
-    }
-
-    private void deleteTeam() {
-        if (minecraft.player != null) {
-            TeamManager.Team team = TeamManager.clientTeams.get(teamName);
-            if (team != null && team.getOwner().equals(minecraft.player.getUUID())) {
-                NetworkHandler.INSTANCE.sendToServer(new DeleteTeamPacket(teamName));
-            }
-        }
-        minecraft.setScreen(new InventoryScreen(minecraft.player));
     }
 
     private void openPlayersList() {
@@ -418,14 +438,6 @@ public class TeamProfileOwner extends BaseModScreen {
     }
 
     public void refreshFromSync() {
-        int guiX = left();
-        int guiY = top();
-
-        // Перестраиваем список участников
-        // (кнопки кика/передачи остаются — они не меняются от настроек)
-        // Если есть метод createPlayerButtons — вызови его, иначе просто updateVisibleButtons
-        // В твоём коде он есть — просто перестраиваем
-        // Но чтобы не дублировать код — просто обновляем видимость
         updateVisibleButtons();
     }
 

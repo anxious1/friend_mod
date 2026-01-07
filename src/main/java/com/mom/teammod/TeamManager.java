@@ -1,9 +1,8 @@
 package com.mom.teammod;
 
 import com.electronwill.nightconfig.core.conversion.ConversionTable;
-import com.mom.teammod.packets.AchievementNotificationPacket;
-import com.mom.teammod.packets.StatsSyncPacket;
-import com.mom.teammod.packets.TeamSyncPacket;
+import com.mod.raidportals.RaidPortalsSavedData;
+import com.mom.teammod.packets.*;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
@@ -666,18 +665,43 @@ public class TeamManager {
             // Синхронизируем обычный профиль (background и т.д.)
             ProfileManager.syncProfileToClient(player);
 
-            // Синхронизируем статистику — НО ОТКЛАДЫВАЕМ на 1 тик, когда handshake точно завершён
+            // Откладываем на 1 тик — handshake завершён
             player.server.submitAsync(() -> {
+                // 📊 Статистика
                 PlayerStatsData stats = new PlayerStatsData(player.getStats());
                 TeamManager.serverPlayerStats.put(player.getUUID(), stats);
-
-                // Отправляем статистику ТОЛЬКО этому игроку
                 NetworkHandler.INSTANCE.send(
                         PacketDistributor.PLAYER.with(() -> player),
                         new StatsSyncPacket(player.getUUID(), stats)
                 );
+
+                // 🏰 Арены (RaidPortals)
+                RaidPortalsSavedData savedData = RaidPortalsSavedData.get(player.serverLevel());
+                RaidPortalsSavedData.PlayerPortalData pd = savedData.playerPortals.get(player.getUUID());
+                if (pd != null) {
+                    NetworkHandler.INSTANCE.send(
+                            PacketDistributor.PLAYER.with(() -> player),
+                            new RaidPortalsSyncPacket(pd.completedTier1, pd.completedTier2, pd.completedTier3)
+                    );
+                }
             });
         }
+    }
+
+    @SubscribeEvent
+    public static void onLogin(PlayerEvent.PlayerLoggedInEvent e) {
+        LastActivityTracker.onLogin(e.getEntity().getUUID());
+    }
+
+    @SubscribeEvent
+    public static void onLogout(PlayerEvent.PlayerLoggedOutEvent e) {
+        UUID id = e.getEntity().getUUID();
+        LastActivityTracker.onLogout(id);
+        // рассылаем оффлайн
+        e.getEntity().getServer().getPlayerList().getPlayers().forEach(p ->
+                NetworkHandler.INSTANCE.send(
+                        PacketDistributor.PLAYER.with(() -> p),
+                        new PlayerStatusPacket(id, (byte)0)));
     }
 
     // Отправить одному игроку
@@ -729,5 +753,13 @@ public class TeamManager {
                 }
             }
         }
+    }
+    public static int[] getOnlineAndTotal(String teamName) {
+        Team t = clientTeams.get(teamName);
+        if (t == null) return new int[]{0, 0};
+        int on = 0;
+        for (UUID u : t.getMembers())
+            if (PlayerStatus.get(u) != PlayerStatus.Status.OFFLINE) on++;
+        return new int[]{on, t.getMembers().size()};
     }
 }

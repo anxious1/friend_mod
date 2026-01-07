@@ -1,17 +1,23 @@
 package com.mom.teammod;
 
+import com.mojang.authlib.GameProfile;
 import com.mom.teammod.packets.ProfileSyncPacket;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.network.PacketDistributor;
+import net.simpleraces.network.SimpleracesModVariables;
 
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+
+import static com.mojang.datafixers.TypeRewriteRule.orElse;
 
 @Mod.EventBusSubscriber(modid = TeamMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class ProfileManager {
@@ -20,6 +26,12 @@ public class ProfileManager {
     public static final Map<UUID, Profile> clientProfiles = new HashMap<>();
 
     public static class Profile {
+        private String race = "";   // пусто = ещё не выбирал
+
+        public String getRace() { return race; }
+        public void setRace(String r) { this.race = r; }
+        private GameProfile gameProfile;
+        private ItemStack[] lastEquipment = new ItemStack[4];
         private UUID playerUUID;
         private String background = "profile_bg1";
         private Map<String, Integer> customStats = new HashMap<>();
@@ -41,6 +53,10 @@ public class ProfileManager {
             customStats.put("play_time_ticks", 0);
 
             customLongStats.put("distance_cm", 0L);
+        }
+
+        public boolean isRaceSelected() {
+            return serializeNBT().contains("selectedRace");
         }
 
         public String getBackground() { return background; }
@@ -83,25 +99,40 @@ public class ProfileManager {
         public CompoundTag serializeNBT() {
             CompoundTag tag = new CompoundTag();
             tag.putString("background", background);
+            if (gameProfile != null) {
+                tag.put("gameProfile", net.minecraft.nbt.NbtUtils.writeGameProfile(new CompoundTag(), gameProfile));
+            }
+
+            ListTag eqList = new ListTag();
+            for (ItemStack stack : lastEquipment) {
+                eqList.add((stack == null ? ItemStack.EMPTY : stack).save(new CompoundTag()));
+            }
+            tag.put("lastEquipment", eqList);
 
             tag.putBoolean("showOnCompass", showOnCompass);
             CompoundTag statsTag = new CompoundTag();
             customStats.forEach(statsTag::putInt);
             customLongStats.forEach(statsTag::putLong);
             tag.put("customStats", statsTag);
-
+            tag.putString("race", race);
             tag.putLong("loginTime", loginTimeMillis); // сохраняем на случай краша (но лучше при логауте)
             return tag;
         }
-
         public void deserializeNBT(CompoundTag tag) {
             background = tag.getString("background");
 
             customStats.clear();
             customLongStats.clear();
-
+            race = tag.getString("race");
             showOnCompass = tag.contains("showOnCompass") ? tag.getBoolean("showOnCompass") : true;
+            if (tag.contains("gameProfile", 10)) {
+                this.gameProfile = net.minecraft.nbt.NbtUtils.readGameProfile(tag.getCompound("gameProfile"));
+            }
 
+            ListTag eqList = tag.getList("lastEquipment", 10);
+            for (int i = 0; i < eqList.size() && i < 4; i++) {
+                lastEquipment[i] = ItemStack.of(eqList.getCompound(i));
+            }
             if (tag.contains("customStats")) {
                 CompoundTag statsTag = tag.getCompound("customStats");
                 for (String key : statsTag.getAllKeys()) {
@@ -123,6 +154,22 @@ public class ProfileManager {
         public void incrementBossKills() {
             customStats.put("boss_kills", getBossKills() + 1);
         }
+
+        public GameProfile getGameProfile() {
+            return gameProfile != null ? gameProfile : new GameProfile(playerUUID, "Unknown");
+        }
+
+        public void setGameProfile(GameProfile profile) {
+            this.gameProfile = profile;
+        }
+
+        public ItemStack[] getLastEquipment() {
+            return lastEquipment;
+        }
+
+        public void setLastEquipment(ItemStack[] eq) {
+            this.lastEquipment = eq;
+        }
     }
 
     public static Profile getProfile(ServerLevel level, UUID playerUUID) {
@@ -141,20 +188,40 @@ public class ProfileManager {
     // Главная правка: безопасная отправка профиля
     public static void syncProfileToClient(ServerPlayer player) {
         UUID uuid = player.getUUID();
-        Profile profile = getProfile(player.serverLevel(), uuid);
-        NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new ProfileSyncPacket(uuid, profile));
+        ServerLevel storageLevel = TeamWorldData.storageLevel(player.getServer());
+        Profile profile = getProfile(storageLevel, uuid);   // теперь всегда овер
+        NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player),
+                new ProfileSyncPacket(uuid, profile));
     }
 
-    // onPlayerLogin:
     @SubscribeEvent
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) {
-            ServerLevel level = player.serverLevel();
-            Profile profile = getProfile(level, player.getUUID());
-            profile.setLoginTime(System.currentTimeMillis());
-            syncProfileToClient(player);
-            TeamWorldData.get(level).setDirty();  // без true
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
+
+        ProfileManager.Profile prof = ProfileManager.getProfile(player.serverLevel(), player.getUUID());
+
+        // Если расу ещё не записали – запишем
+        if (prof.getRace().isEmpty()) {
+            var cap = player.getCapability(SimpleracesModVariables.PLAYER_VARIABLES_CAPABILITY, null).orElse(null);
+            if (cap != null && cap.selected) {
+                String race = cap.aracha    ? "aracha"
+                        : cap.dragon    ? "dragon"
+                        : cap.dwarf     ? "dwarf"
+                        : cap.elf       ? "elf"
+                        : cap.fairy     ? "fairy"
+                        : cap.halfdead  ? "halfdead"
+                        : cap.merfolk   ? "merfolk"
+                        : cap.orc       ? "orc"
+                        : cap.serpentin ? "serpentin"
+                        : cap.werewolf  ? "werewolf"
+                        : "human";
+                prof.setRace(race);
+                TeamWorldData.get(player.serverLevel()).setDirty(true); // сохраним мир
+            }
         }
+
+        // дальше ваш существующий код (синхронизация профиля и т.д.)
+        ProfileManager.syncProfileToClient(player);
     }
 
     // onPlayerLogout: УДАЛИТЬ addPlayTimeTicks + setDirty (дубликат, double время!):

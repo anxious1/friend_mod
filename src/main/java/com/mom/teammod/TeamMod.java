@@ -2,6 +2,8 @@ package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mom.teammod.items.TeamCompassItem;
+import com.mom.teammod.packets.PlayerActivityPacket;
+import com.mom.teammod.packets.RequestProfilePacket;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -12,9 +14,11 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ScreenEvent;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.event.TickEvent;
@@ -195,6 +199,57 @@ public class TeamMod {
                         }
                     }
                 }
+
+                // ===== ДОПОЛНИТЕЛЬНЫЙ ТИКЕР: сброс AFK при любом вводе =====
+                @SubscribeEvent
+                public void onClientTickAFK(TickEvent.ClientTickEvent e) {
+                    if (e.phase != TickEvent.Phase.END) return;
+                    Minecraft mc = Minecraft.getInstance();
+                    if (mc.player == null) return;
+
+                    boolean isMoving = mc.player.input.leftImpulse != 0 ||
+                            mc.player.input.forwardImpulse != 0 ||
+                            mc.player.input.jumping ||
+                            mc.player.input.shiftKeyDown ||
+                            mc.player.xxa != 0 || mc.player.zza != 0;
+
+                    if (isMoving) {
+                        ClientPlayerCache.updateInputTime();
+                        NetworkHandler.INSTANCE.sendToServer(new PlayerActivityPacket());
+                    }
+                }
+
+                //НОВЫЙ ТИКЕР ДЛЯ ClientPlayerCache
+                @SubscribeEvent
+                public void onClientTickCache(TickEvent.ClientTickEvent e) {
+                    if (e.phase != TickEvent.Phase.END) return;
+                    Minecraft mc = Minecraft.getInstance();
+                    if (mc.level == null || mc.player == null) return;
+
+                    // Обновляем статус и экипировку для всех игроков в радиусе
+                    for (Player player : mc.level.players()) {
+                        if (player == mc.player) continue;
+                        UUID uuid = player.getUUID();
+                        ClientPlayerCache.CacheEntry entry = ClientPlayerCache.getOrCreate(uuid);
+
+                        // Статус
+                        entry.status = ClientPlayerCache.PlayerStatus.ONLINE;
+                        long timeSinceLastInput = System.currentTimeMillis() - ClientPlayerCache.lastInputTime;
+                        if (timeSinceLastInput > 10_000) {
+                            entry.status = ClientPlayerCache.PlayerStatus.AFK;
+                        } else {
+                            entry.status = ClientPlayerCache.PlayerStatus.ONLINE;
+                        }
+                        // Экипировка
+                        if (player.distanceTo(mc.player) < 48 * Math.sqrt(2)) { // ~3 чанка
+                            ItemStack[] eq = new ItemStack[4];
+                            for (int i = 0; i < 4; i++) {
+                                eq[i] = player.getItemBySlot(EquipmentSlot.byTypeAndIndex(EquipmentSlot.Type.ARMOR, i)).copy();
+                            }
+                            ClientPlayerCache.onPlayerSeen(uuid, player.getGameProfile(), eq);
+                        }
+                    }
+                }
             });
         }
 
@@ -203,10 +258,26 @@ public class TeamMod {
             int frame = (int)(time * 32 / 1280);
             return frame / 32.0f;
         }
-    }
 
     @Mod.EventBusSubscriber(modid = MODID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = net.minecraftforge.api.distmarker.Dist.CLIENT)
     public static class ClientForgeEvents {
+            private static int profileLoadCooldown = 0;
+
+            @SubscribeEvent
+            public static void onClientTick(TickEvent.ClientTickEvent e) {
+                if (e.phase != TickEvent.Phase.END) return;
+                Minecraft mc = Minecraft.getInstance();
+                if (mc.level == null) return;
+
+                if (--profileLoadCooldown <= 0) {
+                    profileLoadCooldown = 20; // 1 раз в секунду
+                    UUID uuid = ClientPlayerCache.loadQueue.poll();
+                    if (uuid != null) {
+                        LOGGER.info("[AUTO-LOAD] отправляем запрос на {}", uuid);
+                        NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(uuid));
+                    }
+                }
+            }
         @SubscribeEvent
         public static void onScreenInit(ScreenEvent.Init.Post event) {
             if (!(event.getScreen() instanceof InventoryScreen inventoryScreen)) return;
@@ -326,4 +397,5 @@ public class TeamMod {
             });
         }
     }
+}
 }

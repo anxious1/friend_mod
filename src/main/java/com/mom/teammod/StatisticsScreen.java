@@ -50,14 +50,10 @@ public class StatisticsScreen extends BaseModScreen {
         // Убрали всю ванильную хрень — теперь статы из профиля
         System.out.println("[StatisticsScreen] init() вызван. Статистика берётся из профиля.");
 
-        // Кнопка возврата (остаётся без изменений)
         addRenderableWidget(new Button(left() + 86, top() + 89, 47, 14, Component.empty(),
                 b -> {
                     ClientState.hidePlayerRender = false;
-                    minecraft.setScreen(new MyProfileScreen(
-                            StatisticsScreen.this,
-                            Component.translatable("gui.teammod.profile")
-                    ));
+                    minecraft.setScreen(parentScreen); // ← вернётся в OtherPlayerProfileScreen
                 },
                 (narration) -> Component.empty())
         {
@@ -177,7 +173,7 @@ public class StatisticsScreen extends BaseModScreen {
     @Override
     public void onClose() {
         ClientState.hidePlayerRender = false;
-        super.onClose();
+        minecraft.setScreen(parentScreen); // вернёт в OtherPlayerProfileScreen
     }
 
     private String[] getPlayerStats() {
@@ -197,26 +193,18 @@ public class StatisticsScreen extends BaseModScreen {
         // Время: сохранённое + текущая сессия
         int savedTicks = profile.getPlayTimeTicks();
         long sessionMillis = profile.getCurrentSessionMillis();
-        int sessionTicks = (int)(sessionMillis / 50); // ~20 тиков в секунду
+        int sessionTicks = (int)(sessionMillis / 50);
         int completedQuests = FTBQuestsStats.getCompletedQuests(statsOwnerUUID);
-        int totalQuests = FTBQuestsStats.getTotalQuests(); // общее всегда доступно
+        int totalQuests = FTBQuestsStats.getTotalQuests();
         int completedChapters = FTBQuestsStats.getCompletedChapters(statsOwnerUUID);
         int totalChapters = FTBQuestsStats.getTotalChapters();
 
-        // ← НОВОЕ: Порталы по тирам
-        int tier1 = 0;
-        int tier2 = 0;
-        int tier3 = 0;
+        // ✅ БЕЗОПАСНО: арены из кэша (синхронизированы с сервера)
+        ClientPlayerCache.PortalData pd = ClientPlayerCache.getPortalData(statsOwnerUUID);
+        int tier1 = pd.tier1;
+        int tier2 = pd.tier2;
+        int tier3 = pd.tier3;
 
-        RaidPortalsSavedData savedData = RaidPortalsSavedData.get(minecraft.getSingleplayerServer().overworld());
-        if (savedData != null) {
-            RaidPortalsSavedData.PlayerPortalData pd = savedData.playerPortals.get(statsOwnerUUID);
-            if (pd != null) {
-                tier1 = pd.completedTier1;
-                tier2 = pd.completedTier2;
-                tier3 = pd.completedTier3;
-            }
-        }
         int totalTicks = savedTicks + sessionTicks;
         int totalMinutes = totalTicks / 1200;
         int hours = totalMinutes / 60;

@@ -14,6 +14,7 @@
   "gui.teammod.team_members": "Участники",
   "gui.teammod.invite_player": "Пригласить игрока",
   "gui.teammod.kick_player": "Исключить игрока",
+  "gui.teammod.member.view_profile": "Просмотр профиля",
   "gui.teammod.transfer_ownership": "Передать владение",
   "gui.teammod.accept": "Принять",
   "gui.teammod.decline": "Отклонить",
@@ -103,6 +104,5 @@
   "gui.teammod.member.members": "Участников: %d",
   "gui.teammod.member.online": "В сети: %d",
   "gui.teammod.member.leave": "Покинуть команду",
-  "gui.teammod.member.view_profile": "Просмотр профиля",
   "gui.teammod.tooltip.team_quests": "Прогресс команды по квестам: %d/%d выполнено (%d%%)"
 }

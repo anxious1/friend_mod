@@ -1,5 +1,6 @@
 package com.mom.teammod.packets;
 
+import com.mom.teammod.LastActivityTracker;
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.TeamManager;
 import com.mom.teammod.TeamScreen;
@@ -29,7 +30,9 @@ public class LeaveTeamPacket {
     }
 
     public static void handle(LeaveTeamPacket pkt, Supplier<NetworkEvent.Context> ctx) {
+
         ctx.get().enqueueWork(() -> {
+            LastActivityTracker.update(ctx.get().getSender().getUUID());
             UUID leaverUUID = ctx.get().getSender().getUUID();
 
             if (TeamManager.leaveTeam(pkt.teamName, leaverUUID)) {

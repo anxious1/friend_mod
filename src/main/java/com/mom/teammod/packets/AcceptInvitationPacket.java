@@ -1,5 +1,6 @@
 package com.mom.teammod.packets;
 
+import com.mom.teammod.LastActivityTracker;
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.TeamManager;
 import com.mom.teammod.TeamProfileOwner;
@@ -29,7 +30,9 @@ public class AcceptInvitationPacket {
     }
 
     public static void handle(AcceptInvitationPacket pkt, Supplier<NetworkEvent.Context> ctx) {
+
         ctx.get().enqueueWork(() -> {
+            LastActivityTracker.update(ctx.get().getSender().getUUID());
             UUID playerUUID = ctx.get().getSender().getUUID();
 
             if (TeamManager.acceptInvitation(pkt.teamName, playerUUID)) {

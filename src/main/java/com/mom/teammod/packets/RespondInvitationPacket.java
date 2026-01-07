@@ -1,5 +1,6 @@
 package com.mom.teammod.packets;
 
+import com.mom.teammod.LastActivityTracker;
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.TeamManager;
 import com.mom.teammod.TeamMemberScreen;
@@ -31,7 +32,9 @@ public class RespondInvitationPacket {
     }
 
     public static void handle(RespondInvitationPacket msg, Supplier<NetworkEvent.Context> ctx) {
+
         ctx.get().enqueueWork(() -> {
+            LastActivityTracker.update(ctx.get().getSender().getUUID());
             ServerPlayer player = ctx.get().getSender();
             if (player == null) return;
 

@@ -25,6 +25,8 @@ public class NetworkHandler {
     private static int id = 0;
 
     public static void register() {
+        registerMessage(RaidPortalsSyncPacket.class, RaidPortalsSyncPacket::encode, RaidPortalsSyncPacket::decode, RaidPortalsSyncPacket::handle);
+        registerMessage(PlayerStatusPacket.class, PlayerStatusPacket::encode, PlayerStatusPacket::decode, PlayerStatusPacket::handle);
         registerMessage(AchievementNotificationPacket.class, AchievementNotificationPacket::encode, AchievementNotificationPacket::decode, AchievementNotificationPacket::handle);
         INSTANCE.registerMessage(id++, RequestProfilePacket.class, RequestProfilePacket::encode, RequestProfilePacket::decode, RequestProfilePacket::handle, Optional.of(NetworkDirection.PLAY_TO_SERVER));
         registerMessage(StatsSyncPacket.class, StatsSyncPacket::encode, StatsSyncPacket::decode, StatsSyncPacket::handle);
@@ -62,6 +64,8 @@ public class NetworkHandler {
                 RespondInvitationPacket::encode,
                 RespondInvitationPacket::decode,
                 RespondInvitationPacket::handle);
+        registerMessage(PlayerActivityPacket.class, PlayerActivityPacket::encode, PlayerActivityPacket::decode, PlayerActivityPacket::handle);
+
     }
 
     private static <M> void registerMessage(

@@ -1,5 +1,6 @@
 package com.mom.teammod.packets;
 
+import com.mom.teammod.LastActivityTracker;
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.TeamManager;
 import net.minecraft.network.FriendlyByteBuf;
@@ -47,7 +48,9 @@ public class CreateTeamPacket {
 
     // Обработка на сервере
     public static void handle(CreateTeamPacket pkt, Supplier<NetworkEvent.Context> ctx) {
+
         ctx.get().enqueueWork(() -> {
+            LastActivityTracker.update(ctx.get().getSender().getUUID());
             ServerPlayer player = ctx.get().getSender();
 
             boolean success = TeamManager.createTeam(

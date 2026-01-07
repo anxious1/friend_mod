@@ -1,5 +1,6 @@
 package com.mom.teammod.packets;
 
+import com.mom.teammod.LastActivityTracker;
 import com.mom.teammod.TeamManager;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
@@ -28,7 +29,9 @@ public class SendChatPacket {
     }
 
     public static void handle(SendChatPacket pkt, Supplier<NetworkEvent.Context> ctx) {
+
         ctx.get().enqueueWork(() -> {
+            LastActivityTracker.update(ctx.get().getSender().getUUID());
             TeamManager.Team team = TeamManager.getServerTeam(pkt.teamName);
             if (team != null && team.getMembers().contains(ctx.get().getSender().getUUID())) {
                 Component chatMessage = Component.literal("[" + pkt.teamName + "] " + ctx.get().getSender().getName().getString() + ": " + pkt.message);

@@ -1,5 +1,6 @@
 package com.mom.teammod.packets;
 
+import com.mom.teammod.LastActivityTracker;
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.TeamManager;
 import net.minecraft.network.FriendlyByteBuf;
@@ -31,7 +32,9 @@ public class InvitePlayerPacket {
     }
 
     public static void handle(InvitePlayerPacket pkt, Supplier<NetworkEvent.Context> ctx) {
+
         ctx.get().enqueueWork(() -> {
+            LastActivityTracker.update(ctx.get().getSender().getUUID());
             ServerPlayer inviter = ctx.get().getSender();
             if (inviter == null) return;
 

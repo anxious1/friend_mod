@@ -1,5 +1,6 @@
 package com.mom.teammod.packets;
 
+import com.mom.teammod.LastActivityTracker;
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.TeamManager;
 import net.minecraft.network.FriendlyByteBuf;
@@ -38,7 +39,9 @@ public class UpdateTeamSettingsPacket {
     }
 
     public static void handle(UpdateTeamSettingsPacket msg, Supplier<NetworkEvent.Context> ctx) {
+
         ctx.get().enqueueWork(() -> {
+            LastActivityTracker.update(ctx.get().getSender().getUUID());
             var sender = ctx.get().getSender();
             if (sender == null) return;
 

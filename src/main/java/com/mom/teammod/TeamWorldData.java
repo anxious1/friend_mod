@@ -3,6 +3,7 @@ package com.mom.teammod;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.storage.DimensionDataStorage;
@@ -133,6 +134,12 @@ public class TeamWorldData extends SavedData {
 
         return data;
     }
+
+    /** Всегда возвращает overworld, т.е. то место, где мы реально храним данные */
+    public static ServerLevel storageLevel(MinecraftServer server) {
+        return server.overworld();
+    }
+
     private static TeamWorldData loadFromNBT(CompoundTag nbt) {
         TeamWorldData data = new TeamWorldData();
         data.load(nbt);

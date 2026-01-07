@@ -284,12 +284,18 @@ public class MyProfileScreen extends BaseModScreen {
     }
 
     private void renderAFKStatus(GuiGraphics g) {
-        boolean isAfk = System.currentTimeMillis() - lastInputTime.get() >= AFK_THRESHOLD;
-        int u = isAfk ? AFK_U : ONLINE_U;
+        byte st = ClientPlayerCache.getRawStatus(minecraft.player.getUUID());
+        int u = switch (st) {
+            case 1  -> ONLINE_U;
+            case 2  -> AFK_U;
+            default -> ONLINE_U;
+        };
+
         int baseX = (width - GUI_WIDTH) / 2;
         int baseY = (height - GUI_HEIGHT) / 2;
         int drawX = baseX + 88 - 2 + 1 - 2;
         int drawY = baseY + 38 - 3 + 5 - 2;
+
         g.blit(ATLAS, drawX, drawY, u, ONLINE_V, 5, 5, 256, 256);
     }
 

@@ -1,5 +1,6 @@
 package com.mom.teammod.packets;
 
+import com.mom.teammod.LastActivityTracker;
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.TeamManager;
 import net.minecraft.network.FriendlyByteBuf;
@@ -23,7 +24,9 @@ public class DeclineInvitationPacket {
     }
 
     public static void handle(DeclineInvitationPacket pkt, Supplier<NetworkEvent.Context> ctx) {
+
         ctx.get().enqueueWork(() -> {
+            LastActivityTracker.update(ctx.get().getSender().getUUID());
             if (TeamManager.declineInvitation(pkt.teamName, ctx.get().getSender().getUUID())) {
                 NetworkHandler.INSTANCE.reply(new TeamSyncPacket(pkt.teamName), ctx.get());
             }

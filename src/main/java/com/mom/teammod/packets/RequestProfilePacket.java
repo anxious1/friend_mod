@@ -2,7 +2,9 @@ package com.mom.teammod.packets;
 
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.ProfileManager;
+import com.mom.teammod.TeamWorldData;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.PacketDistributor;
@@ -11,7 +13,7 @@ import java.util.UUID;
 import java.util.function.Supplier;
 
 public class RequestProfilePacket {
-    private final UUID targetUUID;
+    private final UUID targetUUID;   // убери static
 
     public RequestProfilePacket(UUID targetUUID) {
         this.targetUUID = targetUUID;
@@ -28,15 +30,20 @@ public class RequestProfilePacket {
     public static void handle(RequestProfilePacket pkt, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             ServerPlayer sender = ctx.get().getSender();
-            if (sender != null) {
-                ProfileManager.Profile profile = ProfileManager.getProfile(sender.serverLevel(), pkt.targetUUID);
+            if (sender == null) return;
 
-                // Правильная отправка пакета клиенту в 1.20.1 Forge
-                NetworkHandler.INSTANCE.send(
-                        PacketDistributor.PLAYER.with(() -> sender),
-                        new ProfileSyncPacket(pkt.targetUUID, profile)
-                );
+            // Берём профиль ТОЛЬКО из овервorld
+            ServerLevel storageLevel = TeamWorldData.storageLevel(sender.getServer());
+            TeamWorldData data = TeamWorldData.get(storageLevel);
+            ProfileManager.Profile profile = data.getPlayerProfiles().get(pkt.targetUUID);
+
+            if (profile == null) {
+                profile = new ProfileManager.Profile(pkt.targetUUID);   // на всякий случай
             }
+            NetworkHandler.INSTANCE.send(
+                    PacketDistributor.PLAYER.with(() -> sender),
+                    new ProfileSyncPacket(pkt.targetUUID, profile)
+            );
         });
         ctx.get().setPacketHandled(true);
     }

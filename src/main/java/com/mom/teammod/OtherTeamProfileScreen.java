@@ -1,7 +1,9 @@
 package com.mom.teammod;
 
+import com.mojang.authlib.GameProfile;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mom.teammod.packets.JoinTeamPacket;
+import com.mom.teammod.packets.RequestProfilePacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ImageButton;
@@ -103,12 +105,11 @@ public class OtherTeamProfileScreen extends BaseModScreen {
     private int[] getOnlineAndTotalPlayers() {
         TeamManager.Team team = TeamManager.clientTeams.get(teamName);
         if (team == null) return new int[]{0, 0};
-        java.util.Set<UUID> members = team.getMembers();
-        int online = 0;
-        for (UUID id : members) {
-            if (minecraft.level.getPlayerByUUID(id) != null) online++;
-        }
-        return new int[]{online, members.size()};
+        long online = team.getMembers()
+                .stream()
+                .filter(ClientPlayerCache::isOnline)
+                .count();
+        return new int[]{(int) online, team.getMembers().size()};
     }
 
     @Override
@@ -227,11 +228,10 @@ public class OtherTeamProfileScreen extends BaseModScreen {
 
     private void createPlayerButtons(int guiX, int guiY) {
         int baseX = guiX + 10;
-        int baseY = guiY + 42;
+        int baseY = guiY + 42 + 14;
         int cellX = baseX + 21 - 9;
         int slotHeight = ONLINE_H + 1;
 
-        // === ДИНАМИЧЕСКИЙ СПИСОК УЧАСТНИКОВ ===
         TeamManager.Team team = TeamManager.clientTeams.get(teamName);
         List<UUID> members = new ArrayList<>();
         UUID ownerId = null;
@@ -240,33 +240,32 @@ public class OtherTeamProfileScreen extends BaseModScreen {
             members.addAll(team.getMembers());
         }
 
-        // Владелец первый
         if (ownerId != null && members.remove(ownerId)) {
             members.add(0, ownerId);
         }
 
-        // Очищаем старые кнопки
         playerButtons.forEach(this::removeWidget);
         playerButtons.clear();
 
-        // Создаём кнопки для всех
         for (int i = 0; i < members.size(); i++) {
             UUID playerId = members.get(i);
-            Player player = minecraft.level != null ? minecraft.level.getPlayerByUUID(playerId) : null;
-
-            String name = player != null ? player.getName().getString() : "Неизвестно";
-            boolean online = player != null;
+            String name = getNameSafe(playerId);
+            if ("Loading...".equals(name)) {
+                ClientPlayerCache.loadQueue.offer(playerId);
+            }
+            boolean online = isOnline(playerId);
             boolean isOwner = playerId.equals(ownerId);
 
-            int buttonY = baseY + 20 + 14 + 4 + i * slotHeight;
+            int buttonY = baseY + 20 + 4 + i * slotHeight;
 
-            final String finalName = name;
             final UUID finalPlayerId = playerId;
+            final String finalName = name;
 
             Button playerButton = new Button(cellX, buttonY, ONLINE_W, ONLINE_H,
                     Component.empty(), b -> {
-                minecraft.setScreen(new OtherPlayerProfileScreen(OtherTeamProfileScreen.this, finalPlayerId, Component.literal("Профиль " + finalName)));
+                minecraft.setScreen(new OtherPlayerProfileScreen(this, finalPlayerId, Component.literal("Профиль " + finalName)));
             }, s -> Component.empty()) {
+
                 @Override
                 public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
                     if (!this.visible) return;
@@ -274,14 +273,12 @@ public class OtherTeamProfileScreen extends BaseModScreen {
                     int bgV = online ? ONLINE_V : 175;
                     g.blit(ATLAS, getX(), getY(), ONLINE_U, bgV, ONLINE_W, ONLINE_H, 256, 256);
 
-                    ResourceLocation skin = minecraft.getSkinManager().getInsecureSkinLocation(
-                            player != null ? player.getGameProfile() : minecraft.player.getGameProfile());
-
+                    ResourceLocation skin = minecraft.getSkinManager().getInsecureSkinLocation(getProfileSafe(finalPlayerId));
                     int headX = getX() + 3;
                     int headY = getY() + (ONLINE_H - 8) / 2;
-                    g.blit(skin, headX, headY, 8, 8, 8, 8, 8, 8, 64, 64);
+                    g.blit(skin, headX, headY, 8, 8, 8, 8, 64, 64);
                     RenderSystem.enableBlend();
-                    g.blit(skin, headX, headY, 8, 8, 40, 8, 8, 8, 64, 64);
+                    g.blit(skin, headX, headY, 40, 8, 8, 8, 64, 64);
                     RenderSystem.disableBlend();
 
                     String tagPart = (showTag && teamTag != null && !teamTag.isEmpty()) ? "[" + teamTag + "]" : "";
@@ -302,16 +299,12 @@ public class OtherTeamProfileScreen extends BaseModScreen {
                 }
             };
 
+            playerButton.setTooltip(Tooltip.create(Component.translatable("gui.teammod.member.view_profile")));
             playerButtons.add(playerButton);
             addRenderableWidget(playerButton);
         }
 
         updateVisibleButtons();
-    }
-
-    private void onPlayerClicked(String playerName) {
-        System.out.println("Клик по игроку в чужой команде: " + playerName);
-        // TODO: можно открыть профиль игрока
     }
 
     private Button addTransparentButton(int x, int y, int w, int h, Runnable action, Component tooltip) {
@@ -513,7 +506,7 @@ public class OtherTeamProfileScreen extends BaseModScreen {
 
         int visibleSlots = 3; // сколько строк видно одновременно в текстуре — это фиксировано!
         int slotHeight = ONLINE_H + 1; // 15 + 1 = 16 пикселей на слот
-        int startY = top() + 42 + 20 + 4; // начальная Y первого видимого слота
+        int startY = top() + 42 + 20 + 4 + 14; // начальная Y первого видимого слота
 
         for (int i = 0; i < playerButtons.size(); i++) {
             Button button = playerButtons.get(i);
@@ -526,5 +519,21 @@ public class OtherTeamProfileScreen extends BaseModScreen {
                 button.visible = false;
             }
         }
+    }
+    private String getNameSafe(UUID id) {
+        GameProfile gp = ClientPlayerCache.getGameProfile(id);
+        if (gp == null || "Unknown".equals(gp.getName())) {
+            NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(id));
+            return "Loading...";
+        }
+        return gp.getName();
+    }
+
+    private boolean isOnline(UUID id) {
+        return ClientPlayerCache.isOnline(id);
+    }
+
+    private GameProfile getProfileSafe(UUID id) {
+        return ClientPlayerCache.getGameProfile(id);
     }
 }

@@ -1,6 +1,7 @@
 // DeleteTeamPacket.java
 package com.mom.teammod.packets;
 
+import com.mom.teammod.LastActivityTracker;
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.TeamManager;
 import com.mom.teammod.TeamScreen;
@@ -29,7 +30,9 @@ public class DeleteTeamPacket {
     }
 
     public static void handle(DeleteTeamPacket pkt, Supplier<NetworkEvent.Context> ctx) {
+
         ctx.get().enqueueWork(() -> {
+            LastActivityTracker.update(ctx.get().getSender().getUUID());
             ServerPlayer player = ctx.get().getSender();
 
             if (TeamManager.deleteTeam(pkt.teamName, player.getUUID())) {
