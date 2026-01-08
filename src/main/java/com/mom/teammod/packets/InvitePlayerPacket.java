@@ -1,12 +1,16 @@
 package com.mom.teammod.packets;
 
+import com.mom.teammod.LastActivityTracker;
 import com.mom.teammod.NetworkHandler;
+import com.mom.teammod.PlayerNameCache;
 import com.mom.teammod.TeamManager;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.network.NetworkEvent;
+import net.minecraftforge.network.PacketDistributor;
 
 import java.util.UUID;
 import java.util.function.Supplier;
@@ -31,19 +35,43 @@ public class InvitePlayerPacket {
 
     public static void handle(InvitePlayerPacket pkt, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
+            LastActivityTracker.update(ctx.get().getSender().getUUID());
             ServerPlayer inviter = ctx.get().getSender();
+            if (inviter == null) return;
+
+            /* поиск цели */
             ServerPlayer invited = inviter.getServer().getPlayerList().getPlayerByName(pkt.playerName);
-            if (invited != null && TeamManager.invitePlayer(pkt.teamName, invited.getUUID(), inviter)) {
-                Component acceptButton = Component.literal("[Accept]").setStyle(Component.empty().getStyle()
-                        .withClickEvent(new net.minecraft.network.chat.ClickEvent(net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND, "/accept " + pkt.teamName))
-                        .withHoverEvent(new net.minecraft.network.chat.HoverEvent(net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT, Component.literal("Accept invitation"))));
-                Component declineButton = Component.literal("[Decline]").setStyle(Component.empty().getStyle()
-                        .withClickEvent(new net.minecraft.network.chat.ClickEvent(net.minecraft.network.chat.ClickEvent.Action.RUN_COMMAND, "/decline " + pkt.teamName))
-                        .withHoverEvent(new net.minecraft.network.chat.HoverEvent(net.minecraft.network.chat.HoverEvent.Action.SHOW_TEXT, Component.literal("Decline invitation"))));
-                invited.sendSystemMessage(Component.literal("Invited to " + pkt.teamName + " by " + inviter.getName().getString() + ". ").append(acceptButton).append(" ").append(declineButton));
-                NetworkHandler.INSTANCE.sendTo(new TeamSyncPacket(pkt.teamName), invited.connection.connection, net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT);
-                NetworkHandler.INSTANCE.reply(new TeamSyncPacket(pkt.teamName), ctx.get());
+            UUID target = invited == null
+                    ? PlayerNameCache.getUUID(pkt.playerName)   // оффлайн
+                    : invited.getUUID();
+            if (target == null) {
+                inviter.sendSystemMessage(Component.literal("§cИгрок не найден."));
+                return;
             }
+
+            /* собственно приглашение */
+            boolean ok = TeamManager.invitePlayer(pkt.teamName, target, inviter);
+            if (!ok) {
+                inviter.sendSystemMessage(Component.literal("§cУже в команде / уже приглашён."));
+                return;
+            }
+
+            /* сообщения */
+            if (invited != null) { // онлайн
+                Component accept = Component.literal("[Принять]")
+                        .withStyle(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/teammod_accept " + pkt.teamName))
+                                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("§aПринять"))));
+                Component decline = Component.literal("[Отклонить]")
+                        .withStyle(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/teammod_decline " + pkt.teamName))
+                                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("§cОтклонить"))));
+                invited.sendSystemMessage(
+                        Component.literal("§eПриглашение в §b" + pkt.teamName + " §eот §f" + inviter.getName().getString() + "§e. ")
+                                .append(accept).append(" ").append(decline)
+                );
+            }
+            inviter.sendSystemMessage(Component.literal("§aПриглашение отправлено."));
+
+            TeamManager.syncTeamToAll(pkt.teamName);
         });
         ctx.get().setPacketHandled(true);
     }

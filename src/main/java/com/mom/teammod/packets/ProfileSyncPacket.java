@@ -1,5 +1,6 @@
 package com.mom.teammod.packets;
 
+import com.mom.teammod.ClientPlayerCache;
 import com.mom.teammod.ProfileManager;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.nbt.CompoundTag;
@@ -34,6 +35,7 @@ public class ProfileSyncPacket {
     public static void handle(ProfileSyncPacket pkt, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
             ProfileManager.Profile profile = ProfileManager.getClientProfile(pkt.playerUUID);
+            ClientPlayerCache.updateFromProfile(pkt.playerUUID, profile);
             if (pkt.profileData != null && !pkt.profileData.isEmpty()) {
                 profile.deserializeNBT(pkt.profileData);
             }

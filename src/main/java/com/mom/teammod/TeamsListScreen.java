@@ -14,7 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 import java.util.*;
 import java.util.stream.Collectors;
 
-public class TeamsListScreen extends Screen {
+public class TeamsListScreen extends BaseModScreen {
 
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/team_list.png");
 
@@ -29,7 +29,7 @@ public class TeamsListScreen extends Screen {
     // Зона скроллбара (80×8)
     private static final int SCROLLBAR_HEIGHT = 80;
     private static final int SCROLLBAR_WIDTH = 8;
-
+    private ReloadButton reloadButton;
     // Цифры
     private static final int[] DIGIT_U = {45, 55, 64, 72};
     private static final int DIGIT_V = 193;
@@ -47,8 +47,8 @@ public class TeamsListScreen extends Screen {
     private boolean isDraggingScrollbar = false;
     private EditBox searchBox;
 
-    public TeamsListScreen() {
-        super(Component.literal(""));
+    public TeamsListScreen(Screen parentScreen) {
+        super(parentScreen, Component.literal(""));
     }
 
     private int left() { return (width - GUI_WIDTH) / 2; }
@@ -65,14 +65,11 @@ public class TeamsListScreen extends Screen {
                 left() + 10 + 22,
                 top() + 179 - 38,
                 30, 12,
-                () -> minecraft.setScreen(new TeamScreen(
-                TeamsListScreen.this,                                      // ← parentScreen
-                new TeamMenu(0, minecraft.player.getInventory()),         // ← создаём меню
-                minecraft.player.getInventory(),
-                Component.translatable("gui.teammod.team_tab"))),
+                () -> minecraft.setScreen(this.parentScreen),  // ← заменить всю лямбду на эту
                 Component.literal("Назад")
         );
-
+        int reloadX = left() + GUI_WIDTH - 20;
+        int reloadY = top() + 5;
         // Поле поиска — поднято на 9 пикселей
         searchBox = new EditBox(font, x + 45 - 21, y + 32 + 14 - 9 - 6 , 165, 8, Component.literal(""));
         searchBox.setBordered(false);
@@ -80,22 +77,11 @@ public class TeamsListScreen extends Screen {
         searchBox.setTextColor(0xFFFFFF);
         searchBox.setResponder(this::onSearchChanged);
         addRenderableWidget(searchBox);
-
+        addRenderableWidget(new ReloadButton(reloadX, reloadY, this::refreshFromSync));
+        refreshFromSync();   // вместо RequestTeamsPacket
         refreshTeamList();
-    }
-
-    @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 256) { // 256 = клавиша ESC
-            minecraft.setScreen(new TeamScreen(
-                    TeamsListScreen.this,
-                    new TeamMenu(0, minecraft.player.getInventory()),
-                    minecraft.player.getInventory(),
-                    Component.translatable("gui.teammod.team_tab")
-            ));
-            return true;
-        }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        reloadButton = new ReloadButton(reloadX, reloadY, this::refreshFromSync);
+        addRenderableWidget(reloadButton);
     }
 
     private Button addTransparentButton(int x, int y, int w, int h, Runnable action, Component tooltip) {
@@ -114,25 +100,16 @@ public class TeamsListScreen extends Screen {
     private void refreshTeamList() {
         Set<String> myTeams = TeamManager.clientPlayerTeams.getOrDefault(minecraft.player.getUUID(), Collections.emptySet());
 
-        // Обновляем только если список изменился
-        boolean changed = allTeams.size() != TeamManager.clientTeams.size();
-        if (!changed) {
-            for (TeamEntry entry : allTeams) {
-                if (!myTeams.contains(entry.team.getName()) != !entry.isMember) {
-                    changed = true;
-                    break;
-                }
+        allTeams.clear();
+        for (TeamManager.Team team : TeamManager.clientTeams.values()) {
+            // Показываем только чужие команды с открытым доступом
+            if (!myTeams.contains(team.getName()) && !team.isInviteOnly()) {
+                allTeams.add(new TeamEntry(team, false));
             }
         }
 
-        if (changed) {
-            allTeams.clear();
-            for (TeamManager.Team team : TeamManager.clientTeams.values()) {
-                allTeams.add(new TeamEntry(team, myTeams.contains(team.getName())));
-            }
-            allTeams.sort(Comparator.comparing(t -> t.team.getName()));
-            applySearchFilter();
-        }
+        allTeams.sort(Comparator.comparing(t -> t.team.getName()));
+        applySearchFilter();
     }
 
     private void applySearchFilter() {
@@ -178,7 +155,7 @@ public class TeamsListScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mx, int my, float pt) {
-        renderBackground(g);
+        this.renderBackground(g);
         RenderSystem.setShaderTexture(0, ATLAS);
         g.blit(ATLAS, left(), top(), 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
 
@@ -258,7 +235,8 @@ public class TeamsListScreen extends Screen {
 
     @Override
     public void tick() {
-        refreshTeamList(); // Оставляем — но теперь он не сбрасывает скролл
+        refreshTeamList();
+        reloadButton.tick();
     }
 
     private class TeamSlotWidget extends Button {
@@ -318,7 +296,7 @@ public class TeamsListScreen extends Screen {
 
             if (isMember) {
                 // Если игрок - участник, открываем его профиль команды (TeamProfileOwner)
-                minecraft.setScreen(new TeamProfileOwner(
+                minecraft.setScreen(new TeamProfileOwner(this,
                         null, // TeamMenu может быть null
                         minecraft.player.getInventory(),
                         Component.literal(team.getName()),
@@ -352,4 +330,10 @@ public class TeamsListScreen extends Screen {
             this.isMember = isMember;
         }
     }
+
+    public void refreshFromSync(){
+        // просим сервер прислать актуальный список всех команд
+        refreshTeamList();
+    }
+
 }

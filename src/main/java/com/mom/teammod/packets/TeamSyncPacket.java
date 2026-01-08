@@ -1,8 +1,9 @@
 package com.mom.teammod.packets;
 
-import com.mom.teammod.TeamManager;
-import com.mom.teammod.TeamScreen;
+import com.mom.teammod.*;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraftforge.network.NetworkEvent;
 
@@ -13,88 +14,121 @@ import java.util.function.Supplier;
 
 public class TeamSyncPacket {
 
-    private final String teamName;
-    private final UUID owner;
-    private final Set<UUID> members = new HashSet<>();
-    private final Set<UUID> invited = new HashSet<>();
-    private final boolean friendlyFire;
-    private final boolean showTag;
-    private final boolean showCompass;
+    public final String teamName;
+    public final CompoundTag teamData; // Полные данные команды или null для удаления/очистки
 
-    // Конструктор для отправки с сервера
+    // Конструктор для полной очистки всех команд
+    public TeamSyncPacket() {
+        this.teamName = "";
+        this.teamData = null;
+    }
+
+    // Конструктор для удаления или обновления конкретной команды
+    public TeamSyncPacket(String teamName, CompoundTag teamData) {
+        this.teamName = teamName;
+        this.teamData = teamData;
+    }
+
+    // Конструктор для удаления (teamData = null)
     public TeamSyncPacket(String teamName) {
-        TeamManager.Team serverTeam = TeamManager.getServerTeam(teamName);
-        if (serverTeam != null) {
-            this.teamName = teamName;
-            this.owner = serverTeam.getOwner();
-            this.members.addAll(serverTeam.getMembers());
-            this.invited.addAll(serverTeam.getInvited());
-            this.friendlyFire = serverTeam.isFriendlyFire();
-            this.showTag = serverTeam.showTag();
-            this.showCompass = serverTeam.showCompass();
-        } else {
-            this.teamName = teamName;
-            this.owner = null;
-            this.friendlyFire = true;
-            this.showTag = true;
-            this.showCompass = true;
+        this.teamName = teamName;
+        this.teamData = null;
+    }
+
+    public static void encode(TeamSyncPacket pkt, FriendlyByteBuf buf) {
+        buf.writeUtf(pkt.teamName);
+        buf.writeBoolean(pkt.teamData != null);
+        if (pkt.teamData != null) {
+            buf.writeNbt(pkt.teamData);
         }
     }
 
-    // Конструктор для чтения из пакета
-    public TeamSyncPacket(FriendlyByteBuf buf) {
-        this.teamName = buf.readUtf(32767);
-        this.owner = buf.readBoolean() ? buf.readUUID() : null;
-
-        int memberCount = buf.readInt();
-        for (int i = 0; i < memberCount; i++) members.add(buf.readUUID());
-
-        int invitedCount = buf.readInt();
-        for (int i = 0; i < invitedCount; i++) invited.add(buf.readUUID());
-
-        this.friendlyFire = buf.readBoolean();
-        this.showTag = buf.readBoolean();
-        this.showCompass = buf.readBoolean();
-    }
-
-    public void encode(FriendlyByteBuf buf) {
-        buf.writeUtf(teamName);
-        buf.writeBoolean(owner != null);
-        if (owner != null) buf.writeUUID(owner);
-
-        buf.writeInt(members.size());
-        for (UUID uuid : members) buf.writeUUID(uuid);
-
-        buf.writeInt(invited.size());
-        for (UUID uuid : invited) buf.writeUUID(uuid);
-
-        buf.writeBoolean(friendlyFire);
-        buf.writeBoolean(showTag);
-        buf.writeBoolean(showCompass);
+    public static TeamSyncPacket decode(FriendlyByteBuf buf) {
+        String name = buf.readUtf(32767);
+        boolean hasData = buf.readBoolean();
+        CompoundTag data = hasData ? buf.readNbt() : null;
+        return new TeamSyncPacket(name, data);
     }
 
     public static void handle(TeamSyncPacket pkt, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
-            TeamManager.Team team = new TeamManager.Team(pkt.teamName, pkt.owner);
-            team.setFriendlyFire(pkt.friendlyFire);
-            team.setShowTag(pkt.showTag);
-            team.setShowCompass(pkt.showCompass);
+            System.out.println("[Client] TeamSyncPacket получен! teamName = '" + pkt.teamName + "', hasData = " + (pkt.teamData != null));
 
-            team.getMembers().clear();
-            team.getMembers().addAll(pkt.members);
-            team.getInvited().clear();
-            team.getInvited().addAll(pkt.invited);
-
-            TeamManager.clientTeams.put(pkt.teamName, team);
-
-            UUID playerUUID = Minecraft.getInstance().player.getUUID();
-            TeamManager.clientPlayerTeams.computeIfAbsent(playerUUID, k -> new HashSet<>()).add(pkt.teamName);
-
-            // Обновляем открытые экраны
-            if (Minecraft.getInstance().screen instanceof TeamScreen screen) {
-                screen.refreshLists();
+            if (pkt.teamName.isEmpty() && pkt.teamData == null) {
+                // Полная очистка всех команд
+                TeamManager.clientTeams.clear();
+                TeamManager.clientPlayerTeams.clear();
+                System.out.println("[Client] Получена команда на полную очистку команд");
+                refreshScreenIfOpen();
+                return;
             }
+
+            if (pkt.teamData == null) {
+                // Удаление команды
+                TeamManager.clientTeams.remove(pkt.teamName);
+                TeamManager.clientPlayerTeams.values().forEach(set -> set.remove(pkt.teamName));
+                System.out.println("[Client] Команда удалена: " + pkt.teamName);
+                Minecraft.getInstance().execute(() -> {
+                    Screen s = Minecraft.getInstance().screen;
+                    if (s instanceof TeamScreen ts) ts.refreshLists();
+                });
+            } else {
+                // Создание или обновление команды
+                TeamManager.Team team = new TeamManager.Team(pkt.teamName, null);
+                team.deserializeNBT(pkt.teamData);
+                TeamManager.clientTeams.put(pkt.teamName, team);
+
+                for (UUID member : team.getMembers()) {
+                    TeamManager.clientPlayerTeams.computeIfAbsent(member, k -> new HashSet<>()).add(pkt.teamName);
+                }
+                System.out.println("[Client] Команда синхронизирована: " + pkt.teamName + " (members: " + team.getMembers().size() + ")");
+            }
+
+            refreshScreenIfOpen();
         });
         ctx.get().setPacketHandled(true);
+    }
+
+    // Вынес обновление экрана в отдельный метод, чтобы не дублировать
+    private static void refreshScreenIfOpen() {
+        Minecraft.getInstance().execute(() -> {
+            Screen current = Minecraft.getInstance().screen;
+
+            if (current instanceof TeamScreen teamScreen) {
+                teamScreen.refreshLists();
+            }
+
+            if (current instanceof OtherTeamProfileScreen otherScreen) {
+                otherScreen.refreshFromSync();
+            }
+
+            if (current instanceof TeamsListScreen listScreen) {
+                listScreen.refreshFromSync();
+            }
+
+            if (current instanceof TeamProfileOwner ownerScreen) {
+                ownerScreen.refreshFromSync();
+            }
+
+            if (current instanceof TeamMemberScreen memberScreen) {
+                memberScreen.refreshFromSync();
+            }
+
+            if (current instanceof PlayersListScreen playersScreen) {
+                playersScreen.refreshFromSync();
+            }
+
+            if (current instanceof CustomizationScreen customScreen) {
+                customScreen.refreshFromSync();
+            }
+
+            if (current instanceof MyTeamsListScreen myTeamsScreen) {
+                myTeamsScreen.refreshTeamList(); // у тебя уже есть этот публичный метод
+            }
+            if (current instanceof TeamScreen teamScreen) {
+                teamScreen.hardRefresh();   // ← новая строка
+            }
+        });
+
     }
 }

@@ -7,7 +7,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
-public class LogoPickerScreen extends Screen {
+public class LogoPickerScreen extends BaseModScreen {
 
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
             "textures/gui/list_of_logos.png");  // ← единственное отличие
@@ -33,9 +33,10 @@ public class LogoPickerScreen extends Screen {
 
     private int scrollOffset = 0;
     private boolean isDraggingScroller = false;
+    Screen parentScreen;
 
-    public LogoPickerScreen() {
-        super(Component.literal(""));
+    public LogoPickerScreen(Screen parentScreen) {
+        super(parentScreen, Component.literal(""));
     }
 
     @Override
@@ -66,7 +67,7 @@ public class LogoPickerScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        renderBackground(g); // ← ванильный фон уже с затемнением
+        this.renderBackground(g); // ← ванильный фон уже с затемнением
         // или вручную:
         // g.fill(0, 0, width, height, 0xB3000000);
 
@@ -145,10 +146,6 @@ public class LogoPickerScreen extends Screen {
         scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
     }
 
-    @Override
-    public void onClose() {
-        super.onClose();
-    }
 
     @Override
     public boolean isPauseScreen() {

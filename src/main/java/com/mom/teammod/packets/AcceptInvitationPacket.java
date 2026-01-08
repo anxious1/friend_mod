@@ -1,16 +1,21 @@
 package com.mom.teammod.packets;
 
+import com.mom.teammod.LastActivityTracker;
 import com.mom.teammod.NetworkHandler;
 import com.mom.teammod.TeamManager;
+import com.mom.teammod.TeamProfileOwner;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
+import net.minecraftforge.network.PacketDistributor;
 
 import java.util.UUID;
 import java.util.function.Supplier;
 
 public class AcceptInvitationPacket {
-    private String teamName;
+    private final String teamName;
 
     public AcceptInvitationPacket(String teamName) {
         this.teamName = teamName;
@@ -25,16 +30,34 @@ public class AcceptInvitationPacket {
     }
 
     public static void handle(AcceptInvitationPacket pkt, Supplier<NetworkEvent.Context> ctx) {
+
         ctx.get().enqueueWork(() -> {
-            if (TeamManager.acceptInvitation(pkt.teamName, ctx.get().getSender().getUUID())) {
-                // Синхронизировать с клиентом и другими членами
+            LastActivityTracker.update(ctx.get().getSender().getUUID());
+            UUID playerUUID = ctx.get().getSender().getUUID();
+
+            if (TeamManager.acceptInvitation(pkt.teamName, playerUUID)) {
                 TeamManager.Team team = TeamManager.getServerTeam(pkt.teamName);
                 if (team != null) {
-                    for (UUID member : team.getMembers()) {
-                        ServerPlayer player = ctx.get().getSender().getServer().getPlayerList().getPlayer(member);
+                    TeamSyncPacket syncPacket = new TeamSyncPacket(pkt.teamName,team.serializeNBT());
+
+                    // Отправляем всем участникам
+                    for (UUID memberUUID : team.getMembers()) {
+                        ServerPlayer player = ctx.get().getSender().getServer()
+                                .getPlayerList().getPlayer(memberUUID);
                         if (player != null) {
-                            NetworkHandler.INSTANCE.sendTo(new TeamSyncPacket(pkt.teamName), player.connection.connection, net.minecraftforge.network.NetworkDirection.PLAY_TO_CLIENT);
+                            NetworkHandler.INSTANCE.send(
+                                    PacketDistributor.PLAYER.with(() -> player),
+                                    syncPacket
+                            );
                         }
+                    }
+
+                    // Если это ТЫ принял приглашение — открываем профиль команды
+                    if (playerUUID.equals(Minecraft.getInstance().player.getUUID())) {
+                        Minecraft.getInstance().execute(() -> {
+                            Minecraft mc = Minecraft.getInstance();
+                            mc.setScreen(new TeamProfileOwner(null, null, mc.player.getInventory(), Component.literal(pkt.teamName), pkt.teamName, team.getTag(), mc.player.getUUID().equals(team.getOwner()), team.showTag(), team.isFriendlyFire()));
+                        });
                     }
                 }
             }

@@ -6,11 +6,36 @@ import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 
-public class ColorPickerScreen extends Screen {
+public class ColorPickerScreen extends BaseModScreen {
 
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
             "textures/gui/list_of_colours.png");
+
+
+    // НОВОЕ: HSV-пикер (тестовый быстрый вариант)
+    private int selectedColor = 0xFFFFFFFF; // текущий цвет (ARGB)
+
+    private float hue = 0f;           // 0-360
+    private float saturation = 1f;    // 0-1
+    private float value = 1f;         // 0-1
+
+    private boolean draggingSquare = false;
+    private boolean draggingHue = false;
+
+    // Координаты внутри твоего GUI (146x105)
+    private static final int SQUARE_X = 10;
+    private static final int SQUARE_Y = 15;
+    private static final int SQUARE_SIZE = 80;
+
+    private static final int HUE_BAR_X = SQUARE_X + SQUARE_SIZE + 10;
+    private static final int HUE_BAR_Y = SQUARE_Y;
+    private static final int HUE_BAR_W = 15;
+
+    private static final int PREVIEW_X = 10;
+    private static final int PREVIEW_Y = SQUARE_Y + SQUARE_SIZE + 10;
+    private static final int PREVIEW_SIZE = 40;
 
     private static final int GUI_WIDTH = 146;
     private static final int GUI_HEIGHT = 105;
@@ -39,9 +64,7 @@ public class ColorPickerScreen extends Screen {
     private int scrollOffset = 0;
     private boolean isDraggingScroller = false;
 
-    public ColorPickerScreen() {
-        super(Component.literal(""));
-    }
+    public ColorPickerScreen(Screen parentScreen) { super(parentScreen, Component.literal("")); }
 
     @Override
     protected void init() {
@@ -71,13 +94,14 @@ public class ColorPickerScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        renderBackground(g); // ← ванильный фон уже с затемнением
+        this.renderBackground(g); // ← ванильный фон уже с затемнением
         // или вручную:
         // g.fill(0, 0, width, height, 0xB3000000);
 
         int x = (width - GUI_WIDTH) / 2;
         int y = (height - GUI_HEIGHT) / 2;
         g.blit(ATLAS, x, y, 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
+        renderColorPicker(g);
         renderScroller(g, x, y);
         super.render(g, mouseX, mouseY, partialTick);
     }
@@ -99,10 +123,25 @@ public class ColorPickerScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double deltaY) {
+        int guiX = (width - GUI_WIDTH) / 2;
+        int guiY = (height - GUI_HEIGHT) / 2;
+        int sqX = guiX + SQUARE_X;
+        int sqY = guiY + SQUARE_Y;
+
+        // НОВОЕ: колёсико над квадратом меняет Value (яркость)
+        if (mouseX >= sqX && mouseX < sqX + SQUARE_SIZE && mouseY >= sqY && mouseY < sqY + SQUARE_SIZE) {
+            value = Mth.clamp(value + (float) deltaY * 0.1f, 0f, 1f);
+            updateColor();
+            return true;
+        }
+
+        // ТВОЙ СТАРЫЙ СКРОЛЛ СПИСКА
         if (TOTAL_ITEMS <= VISIBLE_ITEMS) return false;
+
         int max = TOTAL_ITEMS - VISIBLE_ITEMS;
         scrollOffset -= (int) deltaY;
         scrollOffset = Math.max(0, Math.min(scrollOffset, max));
+
         return true;
     }
 
@@ -110,6 +149,32 @@ public class ColorPickerScreen extends Screen {
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         int guiX = (width - GUI_WIDTH) / 2;
         int guiY = (height - GUI_HEIGHT) / 2;
+
+        // НОВОЕ: клик по квадрату Saturation/Value
+        int sqX = guiX + SQUARE_X;
+        int sqY = guiY + SQUARE_Y;
+        if (mouseX >= sqX && mouseX < sqX + SQUARE_SIZE && mouseY >= sqY && mouseY < sqY + SQUARE_SIZE) {
+            draggingSquare = true;
+            saturation = (float) ((mouseX - sqX) / SQUARE_SIZE);
+            value = 1f - (float) ((mouseY - sqY) / SQUARE_SIZE);
+            saturation = Mth.clamp(saturation, 0f, 1f);
+            value = Mth.clamp(value, 0f, 1f);
+            updateColor();
+            return true;
+        }
+
+        // НОВОЕ: клик по Hue-бару
+        int hueX = guiX + HUE_BAR_X;
+        int hueY = sqY;
+        if (mouseX >= hueX && mouseX < hueX + HUE_BAR_W && mouseY >= hueY && mouseY < hueY + SQUARE_SIZE) {
+            draggingHue = true;
+            hue = (float) ((mouseY - hueY) / SQUARE_SIZE * 360f);
+            hue = Mth.clamp(hue, 0f, 360f);
+            updateColor();
+            return true;
+        }
+
+        // ТВОЙ СТАРЫЙ КОД СКРОЛЛЕРА
         int trackX = guiX + SCROLLER_X;
         int trackTop = guiY + SCROLLER_BASE_Y;
         int trackBottom = trackTop + SCROLL_TRACK_HEIGHT;
@@ -120,20 +185,46 @@ public class ColorPickerScreen extends Screen {
             updateScrollFromMouse(mouseY, guiY);
             return true;
         }
+
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        int guiX = (width - GUI_WIDTH) / 2;
+        int guiY = (height - GUI_HEIGHT) / 2;
+
+        // НОВОЕ: драг по квадрату
+        if (draggingSquare) {
+            int sqX = guiX + SQUARE_X;
+            int sqY = guiY + SQUARE_Y;
+            saturation = Mth.clamp((float) ((mouseX - sqX) / SQUARE_SIZE), 0f, 1f);
+            value = Mth.clamp(1f - (float) ((mouseY - sqY) / SQUARE_SIZE), 0f, 1f);
+            updateColor();
+            return true;
+        }
+
+        // НОВОЕ: драг по Hue
+        if (draggingHue) {
+            int hueY = guiY + SQUARE_Y;
+            hue = Mth.clamp((float) ((mouseY - hueY) / SQUARE_SIZE * 360f), 0f, 360f);
+            updateColor();
+            return true;
+        }
+
+        // ТВОЙ СТАРЫЙ ДРАГ СКРОЛЛЕРА
         if (isDraggingScroller) {
             updateScrollFromMouse(mouseY, (height - GUI_HEIGHT) / 2);
             return true;
         }
+
         return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
     }
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        draggingSquare = false;
+        draggingHue = false;
         isDraggingScroller = false;
         return super.mouseReleased(mouseX, mouseY, button);
     }
@@ -147,11 +238,6 @@ public class ColorPickerScreen extends Screen {
         int maxScroll = Math.max(0, TOTAL_ITEMS - VISIBLE_ITEMS);
         scrollOffset = Math.round(ratio * maxScroll);
         scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
-    }
-
-    @Override
-    public void onClose() {
-        super.onClose();
     }
 
     @Override
@@ -172,5 +258,56 @@ public class ColorPickerScreen extends Screen {
         btn.setTooltip(Tooltip.create(tooltip));
         this.addRenderableWidget(btn);
     }
+    private void updateColor() {
+        int rgb = java.awt.Color.HSBtoRGB(hue / 360f, saturation, value);
+        selectedColor = rgb | 0xFF000000;
+    }
+    private void renderColorPicker(GuiGraphics g) {
+        int guiX = (width - GUI_WIDTH) / 2;
+        int guiY = (height - GUI_HEIGHT) / 2;
 
+        // 1. Квадратик Saturation/Value
+        int sqX = guiX + SQUARE_X;
+        int sqY = guiY + SQUARE_Y;
+
+        for (int x = 0; x < SQUARE_SIZE; x++) {
+            for (int y = 0; y < SQUARE_SIZE; y++) {
+                float s = x / (float) SQUARE_SIZE;
+                float v = 1f - y / (float) SQUARE_SIZE;
+                int rgb = java.awt.Color.HSBtoRGB(hue / 360f, s, v);
+                g.fill(sqX + x, sqY + y, sqX + x + 1, sqY + y + 1, rgb | 0xFF000000);
+            }
+        }
+
+        // Крестик на квадрате
+        int crossX = sqX + (int)(saturation * SQUARE_SIZE);
+        int crossY = sqY + (int)((1f - value) * SQUARE_SIZE);
+        g.fill(crossX - 6, crossY, crossX + 6, crossY + 1, 0xFFFFFFFF);
+        g.fill(crossX, crossY - 6, crossX + 1, crossY + 6, 0xFFFFFFFF);
+
+        // 2. Hue-бар
+        int hueX = guiX + HUE_BAR_X;
+        int hueY = sqY;
+
+        for (int y = 0; y < SQUARE_SIZE; y++) {
+            float h = y / (float) SQUARE_SIZE * 360f;
+            int rgb = java.awt.Color.HSBtoRGB(h / 360f, 1f, 1f);
+            g.fill(hueX, hueY + y, hueX + HUE_BAR_W, hueY + y + 1, rgb | 0xFF000000);
+        }
+
+        // Ползунок Hue
+        int sliderY = hueY + (int)(hue / 360f * SQUARE_SIZE);
+        g.fill(hueX - 2, sliderY - 3, hueX + HUE_BAR_W + 2, sliderY + 3, 0xFFFFFFFF);
+
+        // 3. Кубик-превью
+        int prevX = guiX + PREVIEW_X;
+        int prevY = guiY + PREVIEW_Y;
+        g.fill(prevX, prevY, prevX + PREVIEW_SIZE, prevY + PREVIEW_SIZE, selectedColor);
+
+        // Рамка вокруг кубика
+        g.fill(prevX - 1, prevY - 1, prevX + PREVIEW_SIZE + 1, prevY, 0xFFFFFFFF);
+        g.fill(prevX - 1, prevY + PREVIEW_SIZE, prevX + PREVIEW_SIZE + 1, prevY + PREVIEW_SIZE + 1, 0xFFFFFFFF);
+        g.fill(prevX - 1, prevY, prevX, prevY + PREVIEW_SIZE, 0xFFFFFFFF);
+        g.fill(prevX + PREVIEW_SIZE, prevY, prevX + PREVIEW_SIZE + 1, prevY + PREVIEW_SIZE, 0xFFFFFFFF);
+    }
 }

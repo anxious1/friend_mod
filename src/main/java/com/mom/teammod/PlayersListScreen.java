@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mom.teammod.packets.KickPlayerPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -15,7 +16,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
-public class PlayersListScreen extends Screen {
+public class PlayersListScreen extends BaseModScreen {
 
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
             "textures/gui/players_list.png");
@@ -27,12 +28,11 @@ public class PlayersListScreen extends Screen {
     private static final int PLASHKA_ONLINE_V  = 232;
     private static final int PLASHKA_ONLINE_W  = 167;
     private static final int PLASHKA_ONLINE_H  = 23;
-
     private static final int PLASHKA_OFFLINE_U = 1;
     private static final int PLASHKA_OFFLINE_V = 208;
     private static final int PLASHKA_OFFLINE_W = 167;  // оставляем 168
     private static final int PLASHKA_OFFLINE_H = 23;
-
+    private TeamProfileOwner teamProfileOwner;
     private static final int ZVEZDA_U = 1;
     private static final int ZVEZDA_V = 194;
     private static final int ZVEZDA_W = 7;
@@ -59,7 +59,7 @@ public class PlayersListScreen extends Screen {
     private static final int VISIBLE_SLOTS = 3;
     private static final int SLOT_HEIGHT = 28;
 
-    private final Screen parent;
+    private Screen parent;
     private final String teamName;
     private final List<PlayerEntry> players = new ArrayList<>();
 
@@ -71,10 +71,11 @@ public class PlayersListScreen extends Screen {
     private List<PlayerEntry> filteredPlayers = new ArrayList<>();
 
 
-    public PlayersListScreen(Screen parent, String teamName) {
-        super(Component.literal(""));
+    public PlayersListScreen(Screen parentScreen, String teamName) {
+        super(parentScreen, Component.literal(""));
         this.parent = parent;
         this.teamName = teamName;
+        this.teamProfileOwner = teamProfileOwner;
     }
 
     private int left() { return (width - GUI_WIDTH) / 2; }
@@ -91,10 +92,12 @@ public class PlayersListScreen extends Screen {
         searchBox.setTextColor(0xFFFFFF);
         searchBox.setResponder(this::onSearchChanged);
         addRenderableWidget(searchBox);
-
+        int reloadX = left() + GUI_WIDTH - 20;
+        int reloadY = top() + 5;
+        addRenderableWidget(new ReloadButton(reloadX, reloadY, this::refreshFromSync));
         // Замени свою кнопку "Назад" на эту:
         addRenderableWidget(new Button(left() + 10 + 22, top() + 179 - 38, 30, 12, Component.empty(),
-                button -> minecraft.setScreen(parent),
+                button -> this.onClose(),
                 (supplier) -> Component.literal("Назад"))  // ← вот так правильно
         {
             @Override
@@ -105,20 +108,21 @@ public class PlayersListScreen extends Screen {
             }
         });
 
-        // Кнопка "Подтвердить"
         Button confirmButton = new Button(left() + 2, top() + 172, 43, 10, Component.empty(), b -> {
-            System.out.println("ПОДТВЕРЖДЁН КИК: " + pendingKickPlayer);
-            kickPending = false;
-            pendingKickPlayer = null;
-            refreshPlayerList();
-        }, (narration) -> Component.empty())  // ← пустая наррация
-        {
+            b.visible = false;
+        }, narration -> Component.empty()) {
             @Override
             protected void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-                if (!kickPending) {
+                // Показываем кнопку ТОЛЬКО если количество игроков в allPlayers меньше, чем было изначально
+                TeamManager.Team team = TeamManager.clientTeams.get(teamName);
+                int realCount = team != null ? team.getMembers().size() : 0;
+                boolean listChanged = allPlayers.size() < realCount;
+
+                if (!listChanged) {
                     this.visible = false;
                     return;
                 }
+
                 this.visible = true;
                 g.blit(ATLAS, getX(), getY(), 2, 172, 43, 10, 256, 256);
                 if (this.isHovered()) {
@@ -127,9 +131,6 @@ public class PlayersListScreen extends Screen {
             }
         };
         confirmButton.visible = false;
-        addRenderableWidget(confirmButton);
-
-        confirmButton.visible = false;  // изначально скрыта
         addRenderableWidget(confirmButton);
 
         refreshPlayerList();
@@ -148,57 +149,45 @@ public class PlayersListScreen extends Screen {
             allPlayers.add(new PlayerEntry(memberId, name, online, memberId.equals(ownerId)));
         }
 
-        // ВСЁ ТЕПЕРЬ В allPlayers, А НЕ В players!
-        allPlayers.add(new PlayerEntry(
-                UUID.fromString("deadbeef-dead-beef-dead-beefdeadbeef"),
-                "BirdMan",
-                false,
-                false
-        ));
-
-        allPlayers.add(new PlayerEntry(
-                UUID.fromString("11111111-1111-1111-1111-111111111111"),
-                "BridMan",
-                true,
-                false
-        ));
-
-        allPlayers.add(new PlayerEntry(
-                UUID.fromString("22222222-2222-2222-2222-222222222222"),
-                "Berdamel",
-                false,
-                false
-        ));
-
-        allPlayers.add(new PlayerEntry(
-                UUID.fromString("33333333-3333-3333-3333-333333333333"),
-                "HerobRine",
-                false,
-                false
-        ));
-
-        allPlayers.add(new PlayerEntry(
-                UUID.fromString("44444444-4444-4444-4444-444444444444"),
-                "TOPSON",
-                false,
-                false
-        ));
-
-        applySearchFilter(); // ← теперь увидит всех
+        applySearchFilter(); // обновляем отображение
     }
 
+    public void refreshFromSync() {
+        refreshPlayerList();
+        repositionSlots();
+    }
+
+
     private void repositionSlots() {
-        this.renderables.removeIf(w -> w instanceof PlayerSlotWidget);
+        // ШАГ 1: Удаляем ВСЕ PlayerSlotWidget И ВСЕ вложенные nameButton
+        List<AbstractWidget> toRemove = new ArrayList<>();
+        for (var widget : this.renderables) {
+            if (widget instanceof PlayerSlotWidget slot) {
+                if (slot.nameButton != null) {
+                    toRemove.add(slot.nameButton);
+                }
+                toRemove.add(slot);
+            } else if (widget instanceof Button btn && btn.getMessage().getString().isEmpty() == false) {
+                // Дополнительно ловим любые кнопки с именами (на всякий случай)
+                String text = btn.getMessage().getString();
+                if (text.equals(text.trim()) && !text.isEmpty() && Character.isLetter(text.charAt(0))) {
+                    toRemove.add(btn);
+                }
+            }
+        }
+        this.renderables.removeAll(toRemove);
 
         int baseX = left() + 45 - 21;
         int baseY = top() + 32 + 14;
 
-        for (int i = 0; i < VISIBLE_SLOTS; i++) {
-            int index = i + scrollOffset;
-            if (index >= filteredPlayers.size()) break;
+        int startIndex = scrollOffset;
+        int endIndex = Math.min(startIndex + VISIBLE_SLOTS, filteredPlayers.size());
 
-            PlayerEntry entry = filteredPlayers.get(index);
-            addRenderableWidget(new PlayerSlotWidget(baseX, baseY + i * SLOT_HEIGHT, entry));
+        for (int i = startIndex; i < endIndex; i++) {
+            PlayerEntry entry = filteredPlayers.get(i);
+            int slotY = baseY + (i - startIndex) * SLOT_HEIGHT;
+
+            addRenderableWidget(new PlayerSlotWidget(baseX, slotY, entry));
         }
     }
 
@@ -230,7 +219,7 @@ public class PlayersListScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float pt) {
-        renderBackground(g);
+        this.renderBackground(g);
 
         RenderSystem.setShaderTexture(0, ATLAS);
         g.blit(ATLAS, left(), top(), 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
@@ -443,13 +432,11 @@ public class PlayersListScreen extends Screen {
 
         @Override
         public void onClick(double mx, double my) {
-            // Проверяем, кликнули ли по кнопке имени
             if (nameButton != null && nameButton.isMouseOver(mx, my)) {
                 nameButton.onClick(mx, my);
                 return;
             }
 
-            // Или клик по Kick
             boolean isLeader = TeamManager.clientTeams.get(teamName) != null &&
                     TeamManager.clientTeams.get(teamName).getOwner().equals(minecraft.player.getUUID());
 
@@ -458,9 +445,16 @@ public class PlayersListScreen extends Screen {
                 int kickY = getY() + (height - KICK_H) / 2;
 
                 if (mx >= kickX && mx <= kickX + KICK_W && my >= kickY && my <= kickY + KICK_H) {
-                    System.out.println("Кикнут: " + entry.name);
-                    kickPending = true;
-                    pendingKickPlayer = entry.id;
+                    // Отправляем кик сразу
+                    NetworkHandler.INSTANCE.sendToServer(new KickPlayerPacket(teamName, entry.id));
+
+                    // Сразу убираем из локального списка — визуально исчезает
+                    PlayersListScreen.this.allPlayers.removeIf(e -> e.id.equals(entry.id));
+                    PlayersListScreen.this.applySearchFilter();
+
+                    // Зажигаем кнопку "Подтвердить" — она уже есть в init()
+                    // Ничего не делаем — она сама загорится в render() по флагу kickPending
+                    // но мы его убрали → см. ниже
                     return;
                 }
             }
@@ -475,11 +469,7 @@ public class PlayersListScreen extends Screen {
                 ));
             } else {
                 // Чужой профиль — всё ок, ты уже передаёшь parent
-                minecraft.setScreen(new OtherPlayerProfileScreen(
-                        entry.id,
-                        PlayersListScreen.this,
-                        Component.literal("Профиль " + entry.name)
-                ));
+                minecraft.setScreen(new OtherPlayerProfileScreen(PlayersListScreen.this, entry.id, Component.literal("Профиль " + entry.name)));
             }
         }
 
@@ -512,4 +502,10 @@ public class PlayersListScreen extends Screen {
 
     @Override
     public boolean isPauseScreen() { return false; }
+
+    @Override
+    public void onClose() {
+        if (teamProfileOwner != null) minecraft.setScreen(teamProfileOwner);
+        else super.onClose();                 // fallback
+    }
 }

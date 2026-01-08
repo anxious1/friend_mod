@@ -7,7 +7,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
-public class AchievementPickerScreen2 extends Screen {
+public class AchievementPickerScreen2 extends BaseModScreen {
 
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
             "textures/gui/list_of_achiv.png");
@@ -32,9 +32,7 @@ public class AchievementPickerScreen2 extends Screen {
     private int scrollOffset = 0;
     private boolean isDraggingScroller = false;
 
-    public AchievementPickerScreen2() {
-        super(Component.literal(""));
-    }
+    public AchievementPickerScreen2(Screen parentScreen) { super(parentScreen, Component.literal("")); }
 
     @Override
     protected void init() {
@@ -62,7 +60,7 @@ public class AchievementPickerScreen2 extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        renderBackground(g); // ← ванильный фон уже с затемнением
+        this.renderBackground(g); // ← ванильный фон уже с затемнением
         // или вручную:
         // g.fill(0, 0, width, height, 0xB3000000);
 
@@ -125,8 +123,6 @@ public class AchievementPickerScreen2 extends Screen {
         scrollOffset = Math.round(ratio * max);
         scrollOffset = Math.max(0, Math.min(scrollOffset, max));
     }
-
-    @Override public void onClose() { super.onClose(); }
     @Override public boolean isPauseScreen() { return false; }
 
     private void addTransparentButton(int x, int y, int w, int h, Runnable action, Component tooltip) {

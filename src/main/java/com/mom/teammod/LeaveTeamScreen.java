@@ -1,10 +1,13 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mom.teammod.packets.LeaveTeamPacket;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
@@ -23,6 +26,7 @@ public class LeaveTeamScreen extends Screen {
     private static final int CANCEL_H = 11;  // 46.32 - 35.82 ≈ 11
     private static final int CONFIRM_W = 42; // 127.81 - 85.41 ≈ 42
     private static final int CONFIRM_H = 10; // 45.72 - 36.02 ≈ 10
+    private boolean isModal = true;
 
     // Область для названия команды
     public static final int TEAM_NAME_U = 12;  // 11.58 округляем до 12
@@ -30,7 +34,7 @@ public class LeaveTeamScreen extends Screen {
     public static final int TEAM_NAME_W = 122; // 133.77 - 11.58 ≈ 122
     public static final int TEAM_NAME_H = 8;   // 28.67 - 21.04 ≈ 8
 
-    private final Screen parentScreen;
+    private Screen parentScreen;
     private final String teamName;
     private final String teamTag;
 
@@ -84,42 +88,49 @@ public class LeaveTeamScreen extends Screen {
         });
     }
 
+
+    private void onConfirm() {
+        NetworkHandler.INSTANCE.sendToServer(new LeaveTeamPacket(teamName));
+
+        minecraft.execute(() -> {
+            // Закрываем всё
+            minecraft.setScreen(null);
+
+            // Открываем инвентарь
+            minecraft.setScreen(new InventoryScreen(minecraft.player));
+
+            // Через 1 тик открываем TeamScreen
+            minecraft.tell(() -> {
+                minecraft.setScreen(new TeamScreen(
+                        null,
+                        new TeamMenu(0, minecraft.player.getInventory()),
+                        minecraft.player.getInventory(),
+                        Component.translatable("gui.teammod.team_tab")
+                ));
+            });
+        });
+    }
+
     private void onCancel() {
         minecraft.setScreen(parentScreen);
     }
 
-    private void onConfirm() {
-        System.out.println("Выход из команды подтвержден: " + teamName);
-        // TODO: Отправить пакет на сервер для выхода из команды
-        // NetworkHandler.INSTANCE.sendToServer(new LeaveTeamPacket(teamName));
-        minecraft.setScreen(null); // Закрываем все экраны
-    }
-
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        // 1. Рисуем TeamMemberScreen в замороженном состоянии
-        // Стало:
-        if (this.parentScreen != null && this.parentScreen instanceof TeamMemberScreen teamMember) {
-            // 1. Сначала фон TeamMemberScreen
-            RenderSystem.setShaderTexture(0, TeamMemberScreen.ATLAS);
-            int guiX = teamMember.left();
-            int guiY = teamMember.top();
-            g.blit(TeamMemberScreen.ATLAS, guiX, guiY, 0, 0,
-                    TeamMemberScreen.GUI_WIDTH, TeamMemberScreen.GUI_HEIGHT, 256, 256);
-
-            // 2. ТОЛЬКО элементы (текст, иконки), НЕ КНОПКИ
-            teamMember.renderElementsWithoutButtons(g);
+        // 1. Рисуем parentScreen БЕЗ hover/тултипов (fake mouse coords)
+        if (parentScreen != null) {
+            parentScreen.render(g, -9999, -9999, partialTick);
         }
 
-        // 2. Дополнительное глубокое затемнение поверх
-        LeaveTeamScreen.this.renderBackground(g);
+        // 2. Глубокое затемнение поверх parent
+        this.renderBackground(g);
 
-        // 3. Рисуем окно подтверждения
-        int x = left();
-        int y = top();
+        // 3. Рисуем своё модальное окно
+        int x = (width - FON_W) / 2;
+        int y = (height - FON_H) / 2;
         g.blit(ATLAS, x, y, FON_U, FON_V, FON_W, FON_H, 256, 256);
 
-        // 4. ТЕКСТ КОМАНДЫ В ОКНЕ ПОДТВЕРЖДЕНИЯ
+        // 4. Текст команды
         String teamText = teamName;
         if (teamTag != null && !teamTag.isEmpty()) {
             teamText += "[" + teamTag + "]";
@@ -133,21 +144,60 @@ public class LeaveTeamScreen extends Screen {
         int textY = y + TEAM_NAME_V + (TEAM_NAME_H - 8) / 2;
         g.drawString(font, teamText, textX, textY, 0xFFFFFF, false);
 
-        // 5. КНОПКИ LeaveTeamScreen
+        // 5. Рисуем кнопки модального окна (с реальными mouse для hover/тултипов)
         super.render(g, mouseX, mouseY, partialTick);
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == 256) { // ESC
-            onCancel();
+    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        int x = (width - FON_W) / 2;
+        int y = (height - FON_H) / 2;
+
+        // Если клик внутри модального окна — обрабатываем кнопки
+        if (mouseX >= x && mouseX <= x + FON_W && mouseY >= y && mouseY <= y + FON_H) {
+            return super.mouseClicked(mouseX, mouseY, button);
+        }
+
+        // Клик вне окна — поглощаем (ничего не делаем, фон не реагирует)
+        return true;
+    }
+
+    @Override
+    public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        // Аналогично поглощаем всё
+        if (super.mouseReleased(mouseX, mouseY, button)) {
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return true;
+    }
+
+    @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        // Поглощаем драг
+        if (super.mouseDragged(mouseX, mouseY, button, dragX, dragY)) {
+            return true;
+        }
+        return true;
     }
 
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    @Override
+    public void resize(Minecraft mc, int newWidth, int newHeight) {
+        Screen oldParent = this.parentScreen;
+
+        // Переинициализируем родительский экран (TeamScreen)
+        if (oldParent != null) {
+            oldParent.resize(mc, newWidth, newHeight);
+        }
+
+        // Переинициализируем себя (вызовет init() заново)
+        super.resize(mc, newWidth, newHeight);
+
+        // Восстанавливаем ссылку (на всякий случай)
+        this.parentScreen = oldParent;
     }
 }

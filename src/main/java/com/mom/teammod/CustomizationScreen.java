@@ -3,14 +3,17 @@ package com.mom.teammod;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mom.teammod.packets.DeleteTeamPacket;
 import com.mom.teammod.packets.TeamSyncPacket;
+import com.mom.teammod.packets.UpdateTeamSettingsPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.ImageButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
-public class CustomizationScreen extends Screen {
+public class CustomizationScreen extends BaseModScreen {
 
     public static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/customization_background.png");
 
@@ -26,7 +29,7 @@ public class CustomizationScreen extends Screen {
     public static final int GUI_WIDTH = 256;
     public static final int GUI_HEIGHT = 170;
 
-    private final Screen parent;
+    private Screen parent;
     private final TeamManager.Team team;
 
     // Исходное состояние
@@ -42,8 +45,8 @@ public class CustomizationScreen extends Screen {
     private boolean isModified = false;
     private Button confirmButton;
 
-    public CustomizationScreen(Screen parent, TeamManager.Team team) {
-        super(Component.literal("Настройка команды"));
+    public CustomizationScreen(Screen parentScreen, TeamManager.Team team) {
+        super(parentScreen, Component.literal("Настройка команды"));
         this.parent = parent;
         this.team = team;
 
@@ -62,7 +65,64 @@ public class CustomizationScreen extends Screen {
     @Override
     protected void init() {
         super.init();
+        // ===== CustomizationScreen.java: вставь в самый конец init() ПОСЛЕ super.init(); =====
         int guiX = left();
+        int baseY = top() - 26;
+
+        ResourceLocation unpress = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/unpress.png");
+        ResourceLocation press   = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/press.png");
+
+        ResourceLocation INV_ICON       = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/inv_icon.png");
+        ResourceLocation TEAM_LIST_ICON = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/team_list_icon.png");
+        ResourceLocation PROFILE_ICON   = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/profile_icon.png");
+
+// === КНОПКА ИНВЕНТАРЬ ===
+        this.addRenderableWidget(new ImageButton(guiX + 2, baseY, 26, 27, 0, 0, 0, unpress, button -> {
+            minecraft.setScreen(new InventoryScreen(minecraft.player));
+        }) {
+            private boolean isPressed = false;
+            @Override public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                boolean active = this.isHovered() || isPressed;
+                ResourceLocation tex = active ? press : unpress;
+                int h = active ? 29 : 27;
+                int yOff = active ? -2 : 0;
+                if (this.getHeight() != h) { this.setHeight(h); this.setY(baseY + yOff); }
+                g.blit(tex, getX(), getY(), 0, 0, 26, h, 26, h);
+                g.blit(INV_ICON, getX() + 5, getY() + (active ? 7 : 6), 0, 0, 16, 16, 16, 16);
+                if (this.isHovered()) g.renderTooltip(font, Component.translatable("gui.teammod.inventory"), mx, my);
+            }
+            @Override public void onClick(double mx, double my) { super.onClick(mx, my); this.isPressed = true; }
+        });
+
+// === КНОПКА КОМАНДЫ — ЗАЖАТА ===
+        int teamX = guiX + 2 + 26 + 52;
+        this.addRenderableWidget(new ImageButton(teamX, baseY - 2, 26, 29, 0, 0, 0, press, btn -> {}) {
+            @Override public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                g.blit(press, getX(), getY(), 0, 0, 26, 29, 26, 29);
+                g.blit(TEAM_LIST_ICON, getX() + 5, getY() + 6, 0, 0, 16, 16, 16, 16);
+                if (this.isHovered()) g.renderTooltip(font, Component.translatable("gui.teammod.team_tab"), mx, my);
+            }
+        });
+
+// === КНОПКА ПРОФИЛЬ ===
+        int profileX = teamX + 26;
+        this.addRenderableWidget(new ImageButton(profileX, baseY, 26, 27, 0, 0, 0, unpress, button -> {
+            minecraft.setScreen(new MyProfileScreen(this, Component.translatable("gui.teammod.profile")));
+        }) {
+            private boolean isPressed = false;
+            @Override public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                boolean active = this.isHovered() || isPressed;
+                ResourceLocation tex = active ? press : unpress;
+                int h = active ? 29 : 27;
+                int yOff = active ? -2 : 0;
+                if (this.getHeight() != h) { this.setHeight(h); this.setY(baseY + yOff); }
+                g.blit(tex, getX(), getY(), 0, 0, 26, h, 26, h);
+                g.blit(PROFILE_ICON, getX() + 5, getY() + (active ? 7 : 6), 0, 0, 16, 16, 16, 16);
+                if (this.isHovered()) g.renderTooltip(font, Component.translatable("gui.teammod.profile"), mx, my);
+            }
+            @Override public void onClick(double mx, double my) { super.onClick(mx, my); this.isPressed = true; }
+        });
+
         int guiY = top();
 
         // === КНОПКИ ВЫБОРА ЦВЕТА/ФИГУРЫ (clr1, clr2, shape) ===
@@ -86,11 +146,11 @@ public class CustomizationScreen extends Screen {
     }
 
     private void openColorPicker1() {
-        ColorPickerScreen picker = new ColorPickerScreen() {
+        ColorPickerScreen picker = new ColorPickerScreen(this) {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
                 // 1. Рисуем только фон мира (как в StatisticsScreen)
-                CustomizationScreen.this.renderBackground(g);
+               this.renderBackground(g);
 
                 // 2. Рисуем ТОЛЬКО текстуру фона GUI — БЕЗ ТЕКСТА
                 RenderSystem.setShaderTexture(0, ATLAS);
@@ -115,10 +175,10 @@ public class CustomizationScreen extends Screen {
     }
 
     private void openColorPicker2() {
-        ColorPickerScreen2 picker = new ColorPickerScreen2() {
+        ColorPickerScreen2 picker = new ColorPickerScreen2(this) {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
-                CustomizationScreen.this.renderBackground(g);
+                this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - 256) / 2;
                 int guiY = (height - 170) / 2;
@@ -137,10 +197,10 @@ public class CustomizationScreen extends Screen {
     }
 
     private void openLogoPicker() {
-        LogoPickerScreen picker = new LogoPickerScreen() {
+        LogoPickerScreen picker = new LogoPickerScreen(this) {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
-                CustomizationScreen.this.renderBackground(g);
+                this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - 256) / 2;
                 int guiY = (height - 170) / 2;
@@ -159,10 +219,10 @@ public class CustomizationScreen extends Screen {
     }
 
     private void openAchivPicker1() {
-        AchievementPickerScreen1 picker = new AchievementPickerScreen1() {
+        AchievementPickerScreen1 picker = new AchievementPickerScreen1(this) {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
-                CustomizationScreen.this.renderBackground(g);
+                this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - 256) / 2;
                 int guiY = (height - 170) / 2;
@@ -180,9 +240,9 @@ public class CustomizationScreen extends Screen {
     }
 
     private void openAchivPicker2() {
-        AchievementPickerScreen2 picker = new AchievementPickerScreen2() {
+        AchievementPickerScreen2 picker = new AchievementPickerScreen2(this) {
             @Override public void render(GuiGraphics g, int mx, int my, float pt) {
-                CustomizationScreen.this.renderBackground(g);
+                this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - 256) / 2;
                 int guiY = (height - 170) / 2;
@@ -196,9 +256,9 @@ public class CustomizationScreen extends Screen {
     }
 
     private void openAchivPicker3() {
-        AchievementPickerScreen3 picker = new AchievementPickerScreen3() {
+        AchievementPickerScreen3 picker = new AchievementPickerScreen3(this) {
             @Override public void render(GuiGraphics g, int mx, int my, float pt) {
-                CustomizationScreen.this.renderBackground(g);
+                this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - 256) / 2;
                 int guiY = (height - 170) / 2;
@@ -212,9 +272,9 @@ public class CustomizationScreen extends Screen {
     }
 
     private void openAchivPicker4() {
-        AchievementPickerScreen4 picker = new AchievementPickerScreen4() {
+        AchievementPickerScreen4 picker = new AchievementPickerScreen4(this) {
             @Override public void render(GuiGraphics g, int mx, int my, float pt) {
-                CustomizationScreen.this.renderBackground(g);
+                this.renderBackground(g);
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - 256) / 2;
                 int guiY = (height - 170) / 2;
@@ -300,13 +360,21 @@ public class CustomizationScreen extends Screen {
             removeWidget(confirmButton);
             confirmButton = null;
         }
-        if (isModified) {
+
+        boolean modified = showTag != originalShowTag ||
+                showCompass != originalShowCompass ||
+                friendlyFire != originalFriendlyFire;
+
+        if (modified) {
             int guiX = left();
             int guiY = top();
+
             confirmButton = new Button(guiX + 147, guiY + 139, CONFIRM_W, CONFIRM_H, Component.empty(), b -> applyChanges(), s -> Component.empty()) {
                 @Override
                 public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                    if (isHovered()) g.fill(getX(), getY(), getX() + width, getY() + height, 0x30FFFFFF);
+                    if (isHovered()) {
+                        g.fill(getX(), getY(), getX() + width, getY() + height, 0x30FFFFFF);
+                    }
                     RenderSystem.setShaderTexture(0, ATLAS);
                     g.blit(ATLAS, getX(), getY(), CONFIRM_U, CONFIRM_V, CONFIRM_W, CONFIRM_H, 256, 256);
                 }
@@ -317,12 +385,18 @@ public class CustomizationScreen extends Screen {
     }
 
     private void applyChanges() {
-        if (team != null) {
-            team.setShowTag(showTag);
-            team.setShowCompass(showCompass);
-            team.setFriendlyFire(friendlyFire);
-            NetworkHandler.INSTANCE.sendToServer(new TeamSyncPacket(team.getName()));
-        }
+        if (team == null) return;
+
+        // НИЧЕГО НЕ МЕНЯЕМ В ЛОКАЛЬНОМ team!
+        // Только отправляем пакет на сервер — он сам всё сохранит и разошлёт всем
+        NetworkHandler.INSTANCE.sendToServer(new UpdateTeamSettingsPacket(
+                team.getName(),
+                showTag,
+                showCompass,
+                friendlyFire
+        ));
+
+        // Закрываем окно — обновление придёт через TeamSyncPacket автоматически
         minecraft.setScreen(parent);
     }
 
@@ -336,7 +410,7 @@ public class CustomizationScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        renderBackground(g);
+        this.renderBackground(g);
         RenderSystem.setShaderTexture(0, ATLAS);
         g.blit(ATLAS, left(), top(), 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
 
@@ -347,5 +421,9 @@ public class CustomizationScreen extends Screen {
         }
 
         super.render(g, mouseX, mouseY, partialTick);
+    }
+
+    public void refreshFromSync() {
+        // Настройки уже обновлены в team — render сам возьмёт актуальные
     }
 }

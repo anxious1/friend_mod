@@ -1,20 +1,31 @@
 package com.mom.teammod;
 
+import com.mojang.authlib.GameProfile;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mom.teammod.packets.InvitePlayerPacket;
+import com.mom.teammod.packets.RequestProfilePacket;
+import com.mom.teammod.packets.RespondInvitationPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.ImageButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.InventoryScreen;
+import net.minecraft.client.player.RemotePlayer;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.simpleraces.network.SimpleracesModVariables;
 
+import java.util.Comparator;
 
 import java.util.*;
+import java.util.concurrent.atomic.AtomicLong;
 
-public class OtherPlayerProfileScreen extends Screen {
+public class OtherPlayerProfileScreen extends BaseModScreen {
 
     private static final ResourceLocation ATLAS = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID,
             "textures/gui/user_profile_background.png");
@@ -24,11 +35,15 @@ public class OtherPlayerProfileScreen extends Screen {
     private static final int INVITE_OFF_H = 15;   // ybr(185.31) - ytl(170.71) = 14.6 ≈ 15
     private static final int INVITE_OFF_U = (int)30.76;   // xtl
     private static final int INVITE_OFF_V = (int)170.71;  // ytl
-
+    private static final long AFK_THRESHOLD = 10_000L; // 10 секунд без ввода = AFK
+    private final AtomicLong lastInputTime = new AtomicLong(System.currentTimeMillis());
     private static final int ACCEPT_JOIN_W = 114;  // xbr(244.36) - xtl(130.56) = 113.8 ≈ 114
     private static final int ACCEPT_JOIN_H = 16;   // ybr(200.91) - ytl(185.41) = 15.5 ≈ 16
     private static final int ACCEPT_JOIN_U = (int)130.56;  // xtl
     private static final int ACCEPT_JOIN_V = (int)185.41;  // ytl
+
+    private ItemStack[] lastSeenEquipment = new ItemStack[4]; // 0-3 для слотов брони
+    private boolean hasSeenPlayer = false;
 
     private enum InviteButtonState {
         NONE,        // нет кнопки
@@ -71,19 +86,19 @@ public class OtherPlayerProfileScreen extends Screen {
 
     // Данные профиля
     private final UUID targetPlayerId;
-    private String playerName = "Unknown";
+    public String playerName = "Unknown";
     private OtherPlayerState.PlayerStatus playerStatus;
 
     private final Screen parentScreen;
 
-    public OtherPlayerProfileScreen(UUID targetPlayerId, Screen parentScreen, Component title) {
-        super(title);
+    public OtherPlayerProfileScreen(Screen parentScreen, UUID targetPlayerId, Component title) {
+        super(parentScreen, title);
         this.targetPlayerId = targetPlayerId;
         this.parentScreen = parentScreen;
 
         // Получаем тестовые данные
-        this.playerStatus = OtherPlayerState.getStatus(targetPlayerId);
-        this.playerName = playerStatus.name; // Всегда используем тестовое имя
+        ProfileManager.Profile profile = ProfileManager.getClientProfile(targetPlayerId);
+        NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(targetPlayerId));
     }
 
     private InviteButtonState getInviteButtonState() {
@@ -103,8 +118,24 @@ public class OtherPlayerProfileScreen extends Screen {
     }
 
     @Override
+    public void tick() {
+        super.tick();
+        ProfileManager.Profile prof = ProfileManager.getClientProfile(targetPlayerId);
+        if ("Unknown".equals(prof.getGameProfile().getName())) {
+            // ещё не пришло – повторно запросим (на всякий случай)
+            NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(targetPlayerId));
+        } else {
+            // обновляем имя и перерисовываем
+            if ("Unknown".equals(playerName)) {
+                playerName = prof.getGameProfile().getName();
+            }
+        }
+    }
+
+    @Override
     protected void init() {
-        super.init(); // ← Обязательно первым!
+        super.init();
+        updatePlayerEquipment(targetPlayerId);
         scrollOffset = 0;
         lastRenderedScrollOffset = -1;
 
@@ -120,135 +151,103 @@ public class OtherPlayerProfileScreen extends Screen {
             int guiX  = (width  - 256) / 2;
             int baseY = (height - 170) / 2 - 26;
 
-            // === КНОПКА ИНВЕНТАРЬ ===
+            // КНОПКА ИНВЕНТАРЬ
             int invX = guiX + 2;
-            this.addRenderableWidget(new ImageButton(invX, baseY, 26, 27, 0, 0, 0, unpress, button -> {
-                minecraft.setScreen(new InventoryScreen(minecraft.player));
-            }) {
+            this.addRenderableWidget(new ImageButton(invX, baseY, 26, 27, 0, 0, 0, unpress, b -> minecraft.setScreen(new InventoryScreen(minecraft.player))) {
                 private boolean isPressed = false;
-
-                @Override
-                public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                @Override public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
                     boolean active = this.isHoveredOrFocused() || isPressed;
                     ResourceLocation tex = active ? press : unpress;
                     int h = active ? 29 : 27;
                     int yOff = active ? -2 : 0;
-
-                    if (this.getHeight() != h) {
-                        this.setHeight(h);
-                        this.setY(baseY + yOff);
-                    }
-
+                    if (this.getHeight() != h) { this.setHeight(h); this.setY(baseY + yOff); }
                     g.blit(tex, getX(), getY(), 0, 0, 26, h, 26, h);
                     g.blit(INV_ICON, getX() + 5, getY() + (active ? 7 : 6), 0, 0, 16, 16, 16, 16);
-
-                    if (this.isHoveredOrFocused())
-                        g.renderTooltip(font, Component.translatable("gui.teammod.button3"), mx, my);
+                    if (this.isHoveredOrFocused()) g.renderTooltip(font, Component.translatable("gui.teammod.button3"), mx, my);
                 }
-
-                @Override
-                public void onClick(double mouseX, double mouseY) {
-                    super.onClick(mouseX, mouseY);
-                    this.isPressed = true;
-                }
+                @Override public void onClick(double mx, double my) { super.onClick(mx, my); this.isPressed = true; }
             });
 
-            // === КНОПКА КОМАНДЫ — зажата (ты смотришь чужой профиль) ===
+            // КНОПКА КОМАНДЫ (зажата)
             int teamX = invX + 26 + 52;
-            this.addRenderableWidget(new ImageButton(teamX, baseY - 2, 26, 29, 0, 0, 0, press, button -> {
-                // Клик по зажатой → открываем ТВОИ команды
+            this.addRenderableWidget(new ImageButton(teamX, baseY - 2, 26, 29, 0, 0, 0, press, b -> {
                 minecraft.setScreen(new TeamScreen(
                         OtherPlayerProfileScreen.this,
-                        new TeamMenu(0, minecraft.player.getInventory()),
+                        null,
                         minecraft.player.getInventory(),
                         Component.translatable("gui.teammod.team_tab")
                 ));
             }) {
-                @Override
-                public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                @Override public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
                     g.blit(press, getX(), getY(), 0, 0, 26, 29, 26, 29);
                     g.blit(TEAM_LIST_ICON, getX() + 5, getY() + 6, 0, 0, 16, 16, 16, 16);
-
-                    if (this.isHoveredOrFocused())
-                        g.renderTooltip(font, Component.translatable("gui.teammod.team_tab"), mx, my);
+                    if (this.isHoveredOrFocused()) g.renderTooltip(font, Component.translatable("gui.teammod.team_tab"), mx, my);
                 }
             });
 
-            // === КНОПКА ПРОФИЛЬ ===
+            // КНОПКА ПРОФИЛЬ
             int profileX = teamX + 26;
-            this.addRenderableWidget(new ImageButton(profileX, baseY, 26, 27, 0, 0, 0, unpress, button -> {
-                minecraft.setScreen(new MyProfileScreen(OtherPlayerProfileScreen.this,
-                        Component.translatable("gui.teammod.profile")));
+            this.addRenderableWidget(new ImageButton(profileX, baseY, 26, 27, 0, 0, 0, unpress, b -> {
+                minecraft.setScreen(new MyProfileScreen(OtherPlayerProfileScreen.this, Component.translatable("gui.teammod.profile")));
             }) {
                 private boolean isPressed = false;
-
-                @Override
-                public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                @Override public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
                     boolean active = this.isHoveredOrFocused() || isPressed;
                     ResourceLocation tex = active ? press : unpress;
                     int h = active ? 29 : 27;
                     int yOff = active ? -2 : 0;
-
-                    if (this.getHeight() != h) {
-                        this.setHeight(h);
-                        this.setY(baseY + yOff);
-                    }
-
+                    if (this.getHeight() != h) { this.setHeight(h); this.setY(baseY + yOff); }
                     g.blit(tex, getX(), getY(), 0, 0, 26, h, 26, h);
                     g.blit(PROFILE_ICON, getX() + 5, getY() + (active ? 7 : 6), 0, 0, 16, 16, 16, 16);
-
-                    if (this.isHoveredOrFocused())
-                        g.renderTooltip(font, Component.translatable("gui.teammod.profile"), mx, my);
+                    if (this.isHoveredOrFocused()) g.renderTooltip(font, Component.translatable("gui.teammod.profile"), mx, my);
                 }
-
-                @Override
-                public void onClick(double mouseX, double mouseY) {
-                    super.onClick(mouseX, mouseY);
-                    this.isPressed = true;
-                }
+                @Override public void onClick(double mx, double my) { super.onClick(mx, my); this.isPressed = true; }
             });
         }
 
-        // === ТВОЙ ОСТАЛЬНОЙ КОД (оставляем как есть) ===
         int guiX = (width - GUI_WIDTH) / 2;
         int guiY = (height - GUI_HEIGHT) / 2;
 
-        InviteButtonState buttonState = getInviteButtonState();
+        // === КНОПКА "ПРИГЛАСИТЬ" / "ПРИНЯТЬ ЗАЯВКУ" ===
+        int buttonX = guiX + (GUI_WIDTH - INVITE_OFF_W) / 2 - 23;
+        int buttonY = guiY + GUI_HEIGHT - INVITE_OFF_H - 16;
 
-        if (buttonState == InviteButtonState.NONE) {
-            int buttonX = guiX + (GUI_WIDTH - INVITE_OFF_W) / 2 - 23;
-            int buttonY = guiY + GUI_HEIGHT - INVITE_OFF_H - 16;
+        TeamManager.Team team = TeamManager.clientTeams.get(playerName); // playerName — это имя команды
 
+        if (team != null && team.getInvited().contains(minecraft.player.getUUID())) {
+            // Мы получили приглашение в эту команду → показываем "Принять заявку"
+            addRenderableWidget(new TextureButton(buttonX, buttonY, ACCEPT_JOIN_W, ACCEPT_JOIN_H,
+                    ACCEPT_JOIN_U, ACCEPT_JOIN_V, ATLAS, b -> {
+                NetworkHandler.INSTANCE.sendToServer(new RespondInvitationPacket(playerName, true));
+            }) {
+                @Override public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                    super.renderWidget(g, mx, my, pt);
+                    if (isHovered()) g.fill(getX(), getY(), getX() + width, getY() + height, 0x30FFFFFF);
+                }
+            });
+        } else {
+            // Обычная кнопка "Пригласить в команду"
             addTransparentButton(buttonX, buttonY, INVITE_OFF_W, INVITE_OFF_H,
                     this::openMyTeamsList,
                     Component.literal("Пригласить в команду"));
         }
-        else if (buttonState == InviteButtonState.ACCEPT_JOIN) {
-            int acceptX = guiX + (GUI_WIDTH - ACCEPT_JOIN_W) / 2 - 23;
-            int acceptY = guiY + GUI_HEIGHT - ACCEPT_JOIN_H - 26;
 
-            addRenderableWidget(new TextureButton(acceptX, acceptY, ACCEPT_JOIN_W, ACCEPT_JOIN_H,
-                    ACCEPT_JOIN_U, ACCEPT_JOIN_V, ATLAS, btn -> onAcceptJoinClicked()) {
-                @Override
-                public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                    super.renderWidget(g, mx, my, pt);
-                    if (this.isHovered()) {
-                        g.fill(getX(), getY(), getX() + width, getY() + height, 0x30FFFFFF);
-                    }
-                }
-            });
-        }
-
+        // Кнопка статистики
         addTransparentButton(guiX + 110, guiY + 114, 86, 14,
                 this::openDetailedStats,
                 Component.literal("Подробная статистика"));
+
+        // Реальное имя игрока (если это профиль игрока)
+        Player realPlayer = minecraft.level.getPlayerByUUID(targetPlayerId);
+        if (realPlayer != null) {
+            this.playerName = realPlayer.getName().getString();
+        }
 
         renderTeamList(null);
     }
 
     private void onAcceptJoinClicked() {
-        System.out.println("Принять заявку clicked for " + playerName);
-        // TODO: Отправить пакет на сервер для принятия заявки
+        NetworkHandler.INSTANCE.sendToServer(new RespondInvitationPacket(playerName, true));
     }
 
     private void renderButtonTexture(GuiGraphics g) {
@@ -268,90 +267,92 @@ public class OtherPlayerProfileScreen extends Screen {
     }
 
     private void onInviteOffClicked() {
-        System.out.println("Отклонить приглашение clicked for " + playerName);
-        // TODO: Отправить пакет на сервер для отклонения приглашения
+        NetworkHandler.INSTANCE.sendToServer(new RespondInvitationPacket(playerName, false));
     }
 
     private void openDetailedStats() {
         ClientState.hidePlayerRender = true;
 
-        StatisticsScreen statsScreen = new StatisticsScreen(Component.literal("Подробная статистика")) {
+        StatisticsScreen statsScreen = new StatisticsScreen(this,Component.literal("Подробная статистика"), targetPlayerId) {
             @Override
             public void render(GuiGraphics g, int mx, int my, float pt) {
-                // 1. Рисуем затемнение ВСЕГО ЭКРАНА
-                g.fill(0, 0, width, height, 0xB3000000); // ← ЗДЕСЬ!
+                this.renderBackground(g); // затемнение
 
-                // 2. Рисуем текстуру фона GUI поверх затемнения
+                // Фон профиля
                 RenderSystem.setShaderTexture(0, ATLAS);
                 int guiX = (width - GUI_WIDTH) / 2;
                 int guiY = (height - GUI_HEIGHT) / 2;
                 g.blit(ATLAS, guiX, guiY, 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
 
-                // 3. Рисуем текстуры кнопок (если есть)
-                InviteButtonState buttonState = getInviteButtonState();
-                if (buttonState == InviteButtonState.INVITE_OFF) {
-                    int inviteX = guiX + (GUI_WIDTH - INVITE_OFF_W) / 2 - 23;
-                    int inviteY = guiY + GUI_HEIGHT - INVITE_OFF_H - 16;
-                    g.blit(ATLAS, inviteX, inviteY, INVITE_OFF_U, INVITE_OFF_V,
-                            INVITE_OFF_W, INVITE_OFF_H, 256, 256);
+                // Навигация статично (инвентарь unpress, команды press, профиль unpress)
+                ResourceLocation unpress = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/unpress.png");
+                ResourceLocation press = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/press.png");
+                ResourceLocation INV_ICON = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/inv_icon.png");
+                ResourceLocation TEAM_LIST_ICON = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/team_list_icon.png");
+                ResourceLocation PROFILE_ICON = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/profile_icon.png");
+
+                int baseY = guiY - 26;
+                int navX = guiX + 2;
+
+                g.blit(unpress, navX, baseY, 0, 0, 26, 27, 26, 27);
+                g.blit(INV_ICON, navX + 5, baseY + 6, 0, 0, 16, 16, 16, 16);
+
+                g.blit(press, navX + 78, baseY - 2, 0, 0, 26, 29, 26, 29);
+                g.blit(TEAM_LIST_ICON, navX + 83, baseY + 4, 0, 0, 16, 16, 16, 16);
+
+                g.blit(unpress, navX + 104, baseY, 0, 0, 26, 27, 26, 27);
+                g.blit(PROFILE_ICON, navX + 109, baseY + 6, 0, 0, 16, 16, 16, 16);
+
+                // Список приглашений статично
+                int startX = guiX + 111 + 41 + 10 + 20 + 10 + 10 + 10 + 1 + (int)(8 / 0.75f);
+                int startY = guiY + 30 - 8 + 7 + 1 + 2;
+
+                UUID myId = minecraft.player.getUUID();
+                List<TeamManager.Team> invitations = new ArrayList<>();
+                for (TeamManager.Team team : TeamManager.clientTeams.values()) {
+                    if (team.getInvited().contains(myId)) invitations.add(team);
                 }
-                else if (buttonState == InviteButtonState.ACCEPT_JOIN) {
-                    int acceptX = guiX + (GUI_WIDTH - ACCEPT_JOIN_W) / 2 - 23;
-                    int acceptY = guiY + GUI_HEIGHT - ACCEPT_JOIN_H - 26;
-                    g.blit(ATLAS, acceptX, acceptY, ACCEPT_JOIN_U, ACCEPT_JOIN_V,
-                            ACCEPT_JOIN_W, ACCEPT_JOIN_H, 256, 256);
+                invitations.sort(Comparator.comparing(TeamManager.Team::getName));
+
+                int visible = Math.min(4, invitations.size());
+                for (int i = 0; i < visible; i++) {
+                    int index = i + OtherPlayerProfileScreen.this.scrollOffset;
+                    if (index >= invitations.size()) break;
+
+                    int invY = startY + i * (INV_H + X_H + 2);
+                    int underY = invY + INV_H;
+
+                    g.blit(ATLAS, startX, invY, INV_U, INV_V, INV_W, INV_H, 256, 256);
+                    g.blit(ATLAS, startX + 35, underY, X_U, X_V, X_W, X_H, 256, 256);
+                    g.blit(ATLAS, startX + 60, underY, V_U, V_V, V_W, V_H, 256, 256);
                 }
 
-                // 4. Теперь рисуем окно статистики поверх всего
-                super.render(g, mx, my, pt); // ← Оно рисует СВОЕ окно БЕЗ затемнения
+                // Ползунок приглашений
+                int scrollerX = width / 2 - SCROLLER_W / 2 + 92;
+                int scrollerBaseY = guiY + 80 - 50;
+                int offsetY = 0;
+                if (invitations.size() > VISIBLE_SLOTS) {
+                    float ratio = (float) OtherPlayerProfileScreen.this.scrollOffset / (invitations.size() - VISIBLE_SLOTS);
+                    offsetY = (int) (ratio * (119 - SCROLLER_H));
+                }
+                g.blit(ATLAS, scrollerX, scrollerBaseY + offsetY, SCROLLER_U, SCROLLER_V, SCROLLER_W, SCROLLER_H, 256, 256);
+
+                // Окно статистики поверх
+                super.render(g, mx, my, pt);
             }
 
             @Override
             public void onClose() {
                 ClientState.hidePlayerRender = false;
-                minecraft.setScreen(OtherPlayerProfileScreen.this);
+                minecraft.setScreen(OtherPlayerProfileScreen.this.parentScreen);
             }
         };
 
         statsScreen.init(minecraft, width, height);
         minecraft.setScreen(statsScreen);
     }
-
     private void openMyTeamsList() {
-        MyTeamsListScreen teamsListScreen = new com.mom.teammod.MyTeamsListScreen(this) {
-            @Override
-            public void render(GuiGraphics g, int mx, int my, float pt) {
-                // 1. Рисуем затемнение ВСЕГО ЭКРАНА
-                g.fill(0, 0, width, height, 0xB3000000);
-
-                // 2. Рисуем текстуру фона GUI поверх затемнения
-                RenderSystem.setShaderTexture(0, ATLAS);
-                int guiX = (width - GUI_WIDTH) / 2;
-                int guiY = (height - GUI_HEIGHT) / 2;
-                g.blit(ATLAS, guiX, guiY, 0, 0, GUI_WIDTH, GUI_HEIGHT, 256, 256);
-
-                // 3. Рисуем текстуры кнопок (если есть)
-                InviteButtonState buttonState = getInviteButtonState();
-                if (buttonState == InviteButtonState.INVITE_OFF) {
-                    int inviteX = guiX + (GUI_WIDTH - INVITE_OFF_W) / 2 - 23;
-                    int inviteY = guiY + GUI_HEIGHT - INVITE_OFF_H - 16;
-                    g.blit(ATLAS, inviteX, inviteY, INVITE_OFF_U, INVITE_OFF_V,
-                            INVITE_OFF_W, INVITE_OFF_H, 256, 256);
-                }
-                else if (buttonState == InviteButtonState.ACCEPT_JOIN) {
-                    int acceptX = guiX + (GUI_WIDTH - ACCEPT_JOIN_W) / 2 - 23;
-                    int acceptY = guiY + GUI_HEIGHT - ACCEPT_JOIN_H - 26;
-                    g.blit(ATLAS, acceptX, acceptY, ACCEPT_JOIN_U, ACCEPT_JOIN_V,
-                            ACCEPT_JOIN_W, ACCEPT_JOIN_H, 256, 256);
-                }
-
-                // 4. Рисуем окно со списком команд поверх всего
-                super.render(g, mx, my, pt);
-            }
-        };
-
-        teamsListScreen.init(minecraft, width, height);
-        minecraft.setScreen(teamsListScreen);
+        minecraft.setScreen(new MyTeamsListScreen(this, playerName)); // playerName – ник цели
     }
 
     private Button addTransparentButton(int x, int y, int w, int h, Runnable action, Component tooltip) {
@@ -373,45 +374,80 @@ public class OtherPlayerProfileScreen extends Screen {
         renderStatusIcon(g);
         renderNickname(g);
         renderHumanIconAndText(g);
-        renderCenterBarsAndScroller(g);
+        renderCenterBarsAndScroller(g,mx,my);
         renderButtonTexture(g); // ← Добавить эту строку
     }
 
     private void renderStatusIcon(GuiGraphics g) {
-        int u;
-        if (!playerStatus.online) {
-            u = OFFLINE_U; // Оффлайн
-        } else if (playerStatus.afk) {
-            u = AFK_U; // AFK
-        } else {
-            u = ONLINE_U; // Онлайн
-        }
+        byte st = ClientPlayerCache.getRawStatus(targetPlayerId);
+        int u = switch (st) {
+            case 1  -> ONLINE_U;
+            case 2  -> AFK_U;
+            default -> OFFLINE_U;
+        };
 
         int baseX = (width - GUI_WIDTH) / 2;
         int baseY = (height - GUI_HEIGHT) / 2;
         int drawX = baseX + 88 - 2 + 1 - 2;
         int drawY = baseY + 38 - 3 + 5 - 2;
+
         g.blit(ATLAS, drawX, drawY, u, ONLINE_V, 5, 5, 256, 256);
     }
 
     private void renderSkin(GuiGraphics g, int mx, int my) {
-        if (ClientState.hidePlayerRender) {
-            return;
-        }
-
         int frameX = (width - GUI_WIDTH) / 2 + FRAME_MARGIN_LEFT;
         int frameY = (height - GUI_HEIGHT) / 2 + (GUI_HEIGHT - SKIN_FRAME_HEIGHT) / 2 - 13;
         int playerX = frameX + SKIN_FRAME_WIDTH / 2;
         int playerY = frameY + SKIN_FRAME_HEIGHT - 10;
 
-        // Всегда рисуем скин текущего игрока (minecraft.player) для наглядности
-        if (minecraft.player != null) {
+        Player realPlayer = minecraft.level.getPlayerByUUID(targetPlayerId);
+        ProfileManager.Profile profile = ProfileManager.getClientProfile(targetPlayerId);
+
+        /* 1. Игрок онлайн – рисуем живого, обновляем кэш */
+        if (realPlayer != null && realPlayer.isAlive()) {
+            ItemStack[] equipment = new ItemStack[4];
+            for (int i = 0; i < 4; i++) {
+                equipment[i] = realPlayer.getItemBySlot(EquipmentSlot.byTypeAndIndex(EquipmentSlot.Type.ARMOR, i)).copy();
+            }
+            ClientPlayerCache.onPlayerSeen(targetPlayerId, realPlayer.getGameProfile(), equipment);
+            profile.setGameProfile(realPlayer.getGameProfile());
+            profile.setLastEquipment(equipment);
+
             InventoryScreen.renderEntityInInventoryFollowsMouse(
                     g, playerX, playerY, 38,
                     (float) playerX - mx,
                     (float) (frameY + SKIN_FRAME_HEIGHT / 2) - my,
-                    minecraft.player);
+                    realPlayer);
+            return;
         }
+
+        /* 2. Оффлайн, но уже встречали – берём данные из кэша */
+        if (ClientPlayerCache.hasMet(targetPlayerId)) {
+            GameProfile gp = ClientPlayerCache.getGameProfile(targetPlayerId);
+            ItemStack[] equipment = ClientPlayerCache.getLastEquipment(targetPlayerId);
+
+            Player temp = new RemotePlayer(minecraft.level, gp);
+            for (int i = 0; i < 4; i++) {
+                temp.setItemSlot(EquipmentSlot.byTypeAndIndex(EquipmentSlot.Type.ARMOR, i), equipment[i]);
+            }
+
+            InventoryScreen.renderEntityInInventoryFollowsMouse(
+                    g, playerX, playerY, 38,
+                    (float) playerX - mx,
+                    (float) (frameY + SKIN_FRAME_HEIGHT / 2) - my,
+                    temp);
+            return;
+        }
+
+        /* 3. Никогда не встречались – рисуем default-скин, но ник берём из профиля */
+        GameProfile unknown = new GameProfile(targetPlayerId, profile.getGameProfile().getName());
+        Player temp = new RemotePlayer(minecraft.level, unknown);
+
+        InventoryScreen.renderEntityInInventoryFollowsMouse(
+                g, playerX, playerY, 38,
+                (float) playerX - mx,
+                (float) (frameY + SKIN_FRAME_HEIGHT / 2) - my,
+                temp);
     }
 
     private void renderNickname(GuiGraphics g) {
@@ -452,13 +488,30 @@ public class OtherPlayerProfileScreen extends Screen {
         int baseX = (width - GUI_WIDTH) / 2;
         int baseY = (height - GUI_HEIGHT) / 2;
 
-        // Иконка Human
-        g.blit(ATLAS, baseX + 111 + 41 - 74 - 20 - 20 - 18, baseY + 96 + 123 - 194 + 5 + 5,
-                HUMAN_U, HUMAN_V, HUMAN_W, HUMAN_H, 256, 256);
+        ProfileManager.Profile profile = ProfileManager.getClientProfile(targetPlayerId);
+        String raceLabel = profile.getRace().isEmpty() ? "Human" : profile.getRace();
+        int raceU = switch (raceLabel) {
+            case "aracha"   -> 1;
+            case "dragon"   -> 11;
+            case "dwarf"    -> 21;
+            case "elf"      -> 31;
+            case "fairy"    -> 41;
+            case "halfdead" -> 51;
+            case "merfolk"  -> 61;
+            case "orc"      -> 71;
+            case "serpentin"-> 81;
+            case "werewolf" -> 91;
+            default         -> HUMAN_U;
+        };
 
-        int textX = getHumanTextX("Human");
+        // рисуем иконку и текст
+        g.blit(ATLAS, baseX + 111 + 41 - 74 - 20 - 20 - 18,
+                baseY + 96 + 123 - 194 + 5 + 5,
+                raceU, HUMAN_V, HUMAN_W, HUMAN_H, 256, 256);
+
+        int textX = getHumanTextX(raceLabel);
         int textY = baseY + 96 + 2;
-        g.drawString(font, "Human", textX, textY, 0xFFFFFF, false);
+        g.drawString(font, raceLabel, textX, textY, 0xFFFFFF, false);
     }
 
     // Остальные методы копируются из MyProfileScreen без изменений
@@ -484,97 +537,115 @@ public class OtherPlayerProfileScreen extends Screen {
         }
     }
 
+    // 3. OtherPlayerProfileScreen.java — метод renderTeamList
     private void renderTeamList(GuiGraphics g) {
+        // Полностью заменяем на правильную логику приглашений для текущего игрока
+        this.renderables.removeIf(w -> w instanceof TextureButton);
+
+        UUID myId = minecraft.player.getUUID();
+        List<TeamManager.Team> invitations = new ArrayList<>();
+        for (TeamManager.Team team : TeamManager.clientTeams.values()) {
+            if (team.getInvited().contains(myId)) {
+                invitations.add(team);
+            }
+        }
+
+        invitations.sort(new Comparator<TeamManager.Team>() {
+            @Override
+            public int compare(TeamManager.Team t1, TeamManager.Team t2) {
+                return t1.getName().compareTo(t2.getName());
+            }
+        });
+
         int baseX = (width - GUI_WIDTH) / 2;
         int baseY = (height - GUI_HEIGHT) / 2;
-
         int startX = baseX + 111 + 41 + 10 + 20 + 10 + 10 + 10 + 1 + (int)(8 / 0.75f);
         int startY = baseY + 30 - 8 + 7 + 1 + 2;
 
-        // ВСЁ, ЧТО НИЖЕ - ПОЛНАЯ КОПИЯ ИЗ MyProfileScreen
-        // Убираем старую логику и берем список команд текущего игрока
-
-        if (teamList.isEmpty()) {
-            // Берем команды ТЕКУЩЕГО игрока (minecraft.player), а не targetPlayerId!
-            Set<String> myTeams = TeamManager.clientPlayerTeams.getOrDefault(
-                    minecraft.player.getUUID(), Collections.emptySet());
-            teamList.clear();
-            for (TeamManager.Team team : TeamManager.clientTeams.values()) {
-                if (myTeams.contains(team.getName())) {
-                    teamList.add(team);
-                }
-            }
-            teamList.sort(Comparator.comparing(TeamManager.Team::getName));
-        }
-
-        int currentY = startY;
-        int maxVisible = Math.min(VISIBLE_SLOTS, teamList.size());
-
+        int maxVisible = Math.min(4, invitations.size());
         for (int i = 0; i < maxVisible; i++) {
             int index = i + scrollOffset;
-            if (index >= teamList.size()) break;
+            if (index >= invitations.size()) break;
 
-            TeamManager.Team team = teamList.get(index);
-            String tag = team.getTag();
-            int invY = currentY + i * (INV_H + X_H + 2);
-            int underY = invY + INV_H;
+            TeamManager.Team team = invitations.get(index);
+            int slotY = startY + i * (INV_H + X_H + 2);
 
-            // INV + тег
-            addRenderableWidget(new TextureButton(startX, invY, INV_W, INV_H, INV_U, INV_V, ATLAS, btn -> {
-                System.out.println("Команда: " + team.getName());
-            }) {
-                @Override
-                protected void renderWidget(GuiGraphics gg, int mx, int my, float pt) {
-                    super.renderWidget(gg, mx, my, pt);
-                    if (!tag.isEmpty()) {
-                        float scale = 0.75f;
-                        gg.pose().pushPose();
-                        gg.pose().scale(scale, scale, scale);
-                        int tx = (int) ((this.getX() + INV_W / 2 + 1.25f) / scale) - font.width(tag) / 2;
-                        int ty = (int) ((invY + INV_H / 2 - 2) / scale);
-                        gg.drawString(font, tag, tx + 1, ty + 1, 0x000000, false);
-                        gg.drawString(font, tag, tx, ty, 0xFFFFFF, false);
-                        gg.pose().popPose();
-                    }
-                }
-            });
-
-            // X
-            addRenderableWidget(new TextureButton(startX + 5 + 20 - 24 -1 , underY, X_W, X_H, X_U, X_V, ATLAS, btn -> {
-                System.out.println("X: " + team.getName());
+            addRenderableWidget(new TextureButton(startX, slotY, INV_W, INV_H, INV_U, INV_V, ATLAS, b -> {
+                minecraft.setScreen(new OtherTeamProfileScreen(
+                        OtherPlayerProfileScreen.this,
+                        team.getName(),
+                        team.getTag(),
+                        team.showTag(),
+                        team.showCompass(),
+                        team.isFriendlyFire(),
+                        team.getOwner()
+                ));
             }));
 
-            // V
-            addRenderableWidget(new TextureButton(startX + 5 + 20 + X_W - 24-1, underY, V_W, V_H, V_U, V_V, ATLAS, btn -> {
-                System.out.println("V: " + team.getName());
+            addRenderableWidget(new TextureButton(startX + 35, slotY + INV_H + 2, X_W, X_H, X_U, X_V, ATLAS, b -> {
+                NetworkHandler.INSTANCE.sendToServer(new RespondInvitationPacket(team.getName(), false));
+            }));
+
+            addRenderableWidget(new TextureButton(startX + 60, slotY + INV_H + 2, V_W, V_H, V_U, V_V, ATLAS, b -> {
+                NetworkHandler.INSTANCE.sendToServer(new RespondInvitationPacket(team.getName(), true));
             }));
         }
     }
 
-    private void renderCenterBarsAndScroller(GuiGraphics g) {
-        renderProgressBar1(g);
-        renderProgressBar2(g);
+    private void renderCenterBarsAndScroller(GuiGraphics g, int mouseX, int mouseY) {
+        renderProgressBar1(g, mouseX, mouseY);
+        renderProgressBar2(g, mouseX, mouseY);
         renderScroller(g);
     }
-
-    private void renderProgressBar1(GuiGraphics g) {
+    private void renderProgressBar1(GuiGraphics g, int mouseX, int mouseY) {
         int centerX = width / 2;
         int baseY = (height - GUI_HEIGHT) / 2;
         int x = centerX - BAR_W / 2 + 24;
         int y = baseY + 110 - 34;
-        int fillPercent = 25;
+
+        UUID playerUUID = targetPlayerId;
+        int completedQuests = FTBQuestsStats.getCompletedQuests(playerUUID);
+        int totalQuests = FTBQuestsStats.getTotalQuests();
+
+        int fillPercent = totalQuests > 0 ? (completedQuests * 100) / totalQuests : 0;
         int fillWidth = (int) (BAR_W * fillPercent / 100.0);
+
         g.blit(ATLAS, x, y, BAR_U, BAR_V, fillWidth, BAR_H, 256, 256);
+
+        if (mouseX >= x && mouseX <= x + BAR_W && mouseY >= y && mouseY <= y + BAR_H) {
+            g.renderTooltip(font,
+                    Component.translatable("gui.teammod.tooltip.quests", completedQuests, totalQuests),
+                    mouseX, mouseY);
+        }
     }
 
-    private void renderProgressBar2(GuiGraphics g) {
+    private void renderProgressBar2(GuiGraphics g, int mouseX, int mouseY) {
         int centerX = width / 2;
         int baseY = (height - GUI_HEIGHT) / 2;
         int x = centerX - BAR_W / 2 + 24;
         int y = baseY + 118 - 65;
-        int fillPercent = 75;
+
+        UUID playerUUID = targetPlayerId;
+        int level = SkillTreeStats.getLevel(playerUUID);
+        int currentExp = (int) SkillTreeStats.getCurrentExp(playerUUID);
+        int expForNext = SkillTreeStats.getNextLevelCost(playerUUID);
+
+        int fillPercent = expForNext > 0 ? (currentExp * 100) / expForNext : 100;
         int fillWidth = (int) (BAR_W * fillPercent / 100.0);
+
         g.blit(ATLAS, x, y, BAR_U, BAR_V, fillWidth, BAR_H, 256, 256);
+
+        if (mouseX >= x && mouseX <= x + BAR_W && mouseY >= y && mouseY <= y + BAR_H) {
+            if (expForNext > 0) {
+                g.renderTooltip(font,
+                        Component.translatable("gui.teammod.tooltip.level_progress", currentExp, expForNext, level),
+                        mouseX, mouseY);
+            } else {
+                g.renderTooltip(font,
+                        Component.translatable("gui.teammod.tooltip.max_level", level),
+                        mouseX, mouseY);
+            }
+        }
     }
 
     private void renderScroller(GuiGraphics g) {
@@ -594,7 +665,7 @@ public class OtherPlayerProfileScreen extends Screen {
     @Override
     public void render(GuiGraphics g, int mx, int my, float pt) {
         // Стандартный рендер фона (как в MyProfileScreen)
-        renderBackground(g);
+        this.renderBackground(g);
 
         // Текстура GUI и все элементы
         renderBg(g, pt, mx, my);
@@ -674,5 +745,36 @@ public class OtherPlayerProfileScreen extends Screen {
     public void onClose() {
         ClientState.hidePlayerRender = false; // Сбрасываем флаг
         minecraft.setScreen(parentScreen);
+    }
+
+    @Override
+    public boolean keyPressed(int key, int scan, int mod) {
+        ClientPlayerCache.updateInputTime();
+        return super.keyPressed(key, scan, mod);
+    }
+
+
+    @Override
+    public boolean charTyped(char c, int mod) {
+        lastInputTime.set(System.currentTimeMillis());
+        return super.charTyped(c, mod);
+    }
+
+    @Override
+    public void mouseMoved(double mx, double my) {
+        lastInputTime.set(System.currentTimeMillis());
+        super.mouseMoved(mx, my);
+    }
+
+    // Метод для обновления экипировки при видимости игрока
+    private void updatePlayerEquipment(UUID playerUUID) {
+        Player targetPlayer = minecraft.level.getPlayerByUUID(playerUUID);
+        if (targetPlayer != null) {
+            // Сохраняем текущую экипировку
+            for (int i = 0; i < 4; i++) {
+                lastSeenEquipment[i] = targetPlayer.getItemBySlot(EquipmentSlot.byTypeAndIndex(EquipmentSlot.Type.ARMOR, i)).copy();
+            }
+            hasSeenPlayer = true;
+        }
     }
 }
