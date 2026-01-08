@@ -13,9 +13,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
+import java.util.*;
 
 public class TeamMemberScreen extends BaseModScreen {
 
@@ -38,11 +36,11 @@ public class TeamMemberScreen extends BaseModScreen {
     private static final int FFON_V     = 218;
     private static final int FFON_W     = 12;
     private static final int FFON_H     = 12;
-
+    private int nameCheckTick = 0;
     // Кнопка leave_team (размеры из разметки: 124.49, 138.36, 187.19, 151.57)
     private static final int LEAVE_TEAM_W = 62;  // 187.19 - 124.49 ≈ 63
     private static final int LEAVE_TEAM_H = 12;  // 151.57 - 138.36 ≈ 13
-
+    private final Map<UUID, Button> uuidToButton = new HashMap<>();
     public static final int GUI_WIDTH  = 256;
     public static final int GUI_HEIGHT = 170;
 
@@ -105,118 +103,67 @@ public class TeamMemberScreen extends BaseModScreen {
 
     @Override
     protected void init() {
-        super.init(); // ← ВАЖНО: сначала super.init(), потом кнопки!
-
-        // === УНИВЕРСАЛЬНЫЕ КНОПКИ НАВИГАЦИИ ===
-        {
-            ResourceLocation unpress = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/unpress.png");
-            ResourceLocation press   = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/press.png");
-
-            ResourceLocation INV_ICON       = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/inv_icon.png");
-            ResourceLocation TEAM_LIST_ICON = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/team_list_icon.png");
-            ResourceLocation PROFILE_ICON   = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/profile_icon.png");
-
-            int guiX = (width - 256) / 2;
-            int baseY = (height - 170) / 2 - 26;
-
-            // === КНОПКА ИНВЕНТАРЬ ===
-            int invX = guiX + 2;
-            boolean invPressed = false; // В TeamMemberScreen никогда не зажата
-            this.addRenderableWidget(new ImageButton(invX, baseY, 26, 27, 0, 0, 0, unpress, button -> {
-                minecraft.setScreen(new InventoryScreen(minecraft.player));
-            }) {
-                private boolean isPressed = false;
-
-                @Override
-                public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                    boolean active = this.isHoveredOrFocused() || isPressed;
-                    ResourceLocation tex = active ? press : unpress;
-                    int h = active ? 29 : 27;
-                    int yOff = active ? -2 : 0;
-
-                    if (this.getHeight() != h) {
-                        this.setHeight(h);
-                        this.setY(baseY + yOff);
-                    }
-
-                    g.blit(tex, getX(), getY(), 0, 0, 26, h, 26, h);
-                    g.blit(INV_ICON, getX() + 5, getY() + (active ? 7 : 6), 0, 0, 16, 16, 16, 16);
-
-                    if (this.isHoveredOrFocused()) {
-                        g.renderTooltip(font, Component.translatable("gui.teammod.button3"), mx, my);
-                    }
-                }
-
-                @Override
-                public void onClick(double mouseX, double mouseY) {
-                    super.onClick(mouseX, mouseY);
-                    this.isPressed = true;
-                }
-            });
-
-            // === КНОПКА КОМАНДЫ (всегда ведёт в TeamScreen) ===
-            int teamX = invX + 26 + 52;
-            boolean teamPressed = true; // ← В TeamMemberScreen — ты в команде → зажата!
-            this.addRenderableWidget(new ImageButton(teamX, baseY - 2, 26, 29, 0, 0, 0, press, button -> {
-                // Клик по зажатой — открывает твои команды (TeamScreen)
-                minecraft.setScreen(new TeamScreen(
-                        TeamMemberScreen.this,
-                        new TeamMenu(0, minecraft.player.getInventory()),
-                        minecraft.player.getInventory(),
-                        Component.translatable("gui.teammod.team_tab")
-                ));
-            }) {
-                @Override
-                public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                    g.blit(press, getX(), getY(), 0, 0, 26, 29, 26, 29);
-                    g.blit(TEAM_LIST_ICON, getX() + 5, getY() + 6, 0, 0, 16, 16, 16, 16);
-
-                    if (this.isHoveredOrFocused()) {
-                        g.renderTooltip(font, Component.translatable("gui.teammod.team_tab"), mx, my);
-                    }
-                }
-            });
-
-            // === КНОПКА ПРОФИЛЬ ===
-            int profileX = teamX + 26;
-            boolean profilePressed = false; // В TeamMemberScreen — профиль НЕ зажат
-            this.addRenderableWidget(new ImageButton(profileX, baseY, 26, 27, 0, 0, 0, unpress, button -> {
-                minecraft.setScreen(new MyProfileScreen(TeamMemberScreen.this, Component.translatable("gui.teammod.profile")));
-            }) {
-                private boolean isPressed = false;
-
-                @Override
-                public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
-                    boolean active = this.isHoveredOrFocused() || isPressed;
-                    ResourceLocation tex = active ? press : unpress;
-                    int h = active ? 29 : 27;
-                    int yOff = active ? -2 : 0;
-
-                    if (this.getHeight() != h) {
-                        this.setHeight(h);
-                        this.setY(baseY + yOff);
-                    }
-
-                    g.blit(tex, getX(), getY(), 0, 0, 26, h, 26, h);
-                    g.blit(PROFILE_ICON, getX() + 5, getY() + (active ? 7 : 6), 0, 0, 16, 16, 16, 16);
-
-                    if (this.isHoveredOrFocused()) {
-                        g.renderTooltip(font, Component.translatable("gui.teammod.profile"), mx, my);
-                    }
-                }
-
-                @Override
-                public void onClick(double mouseX, double mouseY) {
-                    super.onClick(mouseX, mouseY);
-                    this.isPressed = true;
-                }
-            });
-        }
-
-        // === ОСТАЛЬНОЙ ТВОЙ КОД (ниже) ===
-        scrollOffset = 0;
+        super.init();
 
         int guiX = left();
+        int baseY = top() - 26;
+
+        ResourceLocation unpress = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/unpress.png");
+        ResourceLocation press   = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/press.png");
+
+        ResourceLocation INV_ICON       = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/inv_icon.png");
+        ResourceLocation TEAM_LIST_ICON = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/team_list_icon.png");
+        ResourceLocation PROFILE_ICON   = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/profile_icon.png");
+
+// === КНОПКА ИНВЕНТАРЬ ===
+        this.addRenderableWidget(new ImageButton(guiX + 2, baseY, 26, 27, 0, 0, 0, unpress, button -> {
+            minecraft.setScreen(new InventoryScreen(minecraft.player));
+        }) {
+            private boolean isPressed = false;
+            @Override public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                boolean active = this.isHovered() || isPressed;
+                ResourceLocation tex = active ? press : unpress;
+                int h = active ? 29 : 27;
+                int yOff = active ? -2 : 0;
+                if (this.getHeight() != h) { this.setHeight(h); this.setY(baseY + yOff); }
+                g.blit(tex, getX(), getY(), 0, 0, 26, h, 26, h);
+                g.blit(INV_ICON, getX() + 5, getY() + (active ? 7 : 6), 0, 0, 16, 16, 16, 16);
+                if (this.isHovered()) g.renderTooltip(font, Component.translatable("gui.teammod.inventory"), mx, my);
+            }
+            @Override public void onClick(double mx, double my) { super.onClick(mx, my); this.isPressed = true; }
+        });
+
+// === КНОПКА КОМАНДЫ — ЗАЖАТА ===
+        int teamX = guiX + 2 + 26 + 52;
+        this.addRenderableWidget(new ImageButton(teamX, baseY - 2, 26, 29, 0, 0, 0, press, btn -> {}) {
+            @Override public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                g.blit(press, getX(), getY(), 0, 0, 26, 29, 26, 29);
+                g.blit(TEAM_LIST_ICON, getX() + 5, getY() + 6, 0, 0, 16, 16, 16, 16);
+                if (this.isHovered()) g.renderTooltip(font, Component.translatable("gui.teammod.team_tab"), mx, my);
+            }
+        });
+
+// === КНОПКА ПРОФИЛЬ ===
+        int profileX = teamX + 26;
+        this.addRenderableWidget(new ImageButton(profileX, baseY, 26, 27, 0, 0, 0, unpress, button -> {
+            minecraft.setScreen(new MyProfileScreen(this, Component.translatable("gui.teammod.profile")));
+        }) {
+            private boolean isPressed = false;
+            @Override public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                boolean active = this.isHovered() || isPressed;
+                ResourceLocation tex = active ? press : unpress;
+                int h = active ? 29 : 27;
+                int yOff = active ? -2 : 0;
+                if (this.getHeight() != h) { this.setHeight(h); this.setY(baseY + yOff); }
+                g.blit(tex, getX(), getY(), 0, 0, 26, h, 26, h);
+                g.blit(PROFILE_ICON, getX() + 5, getY() + (active ? 7 : 6), 0, 0, 16, 16, 16, 16);
+                if (this.isHovered()) g.renderTooltip(font, Component.translatable("gui.teammod.profile"), mx, my);
+            }
+            @Override public void onClick(double mx, double my) { super.onClick(mx, my); this.isPressed = true; }
+        });
+
+        scrollOffset = 0;
+
         int guiY = top();
 
         addLeaveTeamButton(guiX - 4 + (67-7+9) + OFFSET_X/4, guiY - 2 + 105+1 + OFFSET_Y/4, LEAVE_TEAM_W, LEAVE_TEAM_H);
@@ -302,6 +249,8 @@ public class TeamMemberScreen extends BaseModScreen {
                     }
                 }
             };
+
+            uuidToButton.put(finalPlayerId, playerButton);
 
             playerButton.setTooltip(Tooltip.create(Component.translatable("gui.teammod.member.view_profile")));
             playerButtons.add(playerButton);
@@ -622,5 +571,29 @@ public class TeamMemberScreen extends BaseModScreen {
 
     private GameProfile getProfileSafe(UUID id) {
         return ClientPlayerCache.getGameProfile(id);
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (++nameCheckTick >= 10) {
+            nameCheckTick = 0;
+
+            for (Map.Entry<UUID, Button> entry : uuidToButton.entrySet()) {
+                UUID uuid = entry.getKey();
+                Button btn = entry.getValue();
+                String oldName = btn.getMessage().getString();
+                String newName = getNameSafe(uuid);
+
+                if (!newName.equals(oldName) && !"Loading...".equals(newName)) {
+                    btn.setMessage(Component.literal(newName));
+                }
+            }
+        }
+    }
+
+    private List<UUID> getAllPlayerUUIDs() {
+        TeamManager.Team team = TeamManager.clientTeams.get(teamName);
+        return team != null ? new ArrayList<>(team.getMembers()) : List.of();
     }
 }

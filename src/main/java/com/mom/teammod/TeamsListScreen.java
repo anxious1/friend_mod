@@ -29,7 +29,7 @@ public class TeamsListScreen extends BaseModScreen {
     // Зона скроллбара (80×8)
     private static final int SCROLLBAR_HEIGHT = 80;
     private static final int SCROLLBAR_WIDTH = 8;
-
+    private ReloadButton reloadButton;
     // Цифры
     private static final int[] DIGIT_U = {45, 55, 64, 72};
     private static final int DIGIT_V = 193;
@@ -68,7 +68,8 @@ public class TeamsListScreen extends BaseModScreen {
                 () -> minecraft.setScreen(this.parentScreen),  // ← заменить всю лямбду на эту
                 Component.literal("Назад")
         );
-
+        int reloadX = left() + GUI_WIDTH - 20;
+        int reloadY = top() + 5;
         // Поле поиска — поднято на 9 пикселей
         searchBox = new EditBox(font, x + 45 - 21, y + 32 + 14 - 9 - 6 , 165, 8, Component.literal(""));
         searchBox.setBordered(false);
@@ -76,8 +77,11 @@ public class TeamsListScreen extends BaseModScreen {
         searchBox.setTextColor(0xFFFFFF);
         searchBox.setResponder(this::onSearchChanged);
         addRenderableWidget(searchBox);
-
+        addRenderableWidget(new ReloadButton(reloadX, reloadY, this::refreshFromSync));
+        refreshFromSync();   // вместо RequestTeamsPacket
         refreshTeamList();
+        reloadButton = new ReloadButton(reloadX, reloadY, this::refreshFromSync);
+        addRenderableWidget(reloadButton);
     }
 
     private Button addTransparentButton(int x, int y, int w, int h, Runnable action, Component tooltip) {
@@ -231,7 +235,8 @@ public class TeamsListScreen extends BaseModScreen {
 
     @Override
     public void tick() {
-        refreshTeamList(); // Оставляем — но теперь он не сбрасывает скролл
+        refreshTeamList();
+        reloadButton.tick();
     }
 
     private class TeamSlotWidget extends Button {
@@ -326,7 +331,9 @@ public class TeamsListScreen extends BaseModScreen {
         }
     }
 
-    public void refreshFromSync() {
-        this.refreshTeamList();
+    public void refreshFromSync(){
+        // просим сервер прислать актуальный список всех команд
+        refreshTeamList();
     }
+
 }

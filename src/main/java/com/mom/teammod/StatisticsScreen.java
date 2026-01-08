@@ -13,6 +13,7 @@ import net.minecraft.stats.StatsCounter;
 import net.minecraft.core.Registry;
 import com.mod.raidportals.RaidPortalsSavedData;
 
+import java.util.Arrays;
 import java.util.UUID;
 
 public class StatisticsScreen extends BaseModScreen {
@@ -29,6 +30,8 @@ public class StatisticsScreen extends BaseModScreen {
     private int scrollOffset = 0;
     private boolean isDraggingScroller = false;
 
+    private int statUpdateCounter = 0;
+    private String[] lastStats = new String[0];
 
     // Параметры скроллера
     private static final int VISIBLE_LINES = 4;
@@ -168,6 +171,24 @@ public class StatisticsScreen extends BaseModScreen {
         int maxScroll = Math.max(0, stats.length - VISIBLE_LINES);
         scrollOffset = Math.round(ratio * maxScroll);
         scrollOffset = Math.max(0, Math.min(scrollOffset, maxScroll));
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+
+        if (++statUpdateCounter >= 60) { // Обновление каждые 3 секунды
+            statUpdateCounter = 0;
+            String[] currentStats = getPlayerStats();
+
+            if (!Arrays.equals(currentStats, lastStats)) {
+                lastStats = currentStats;
+                // Принудительно перерисовываем
+                if (minecraft.screen == this) {
+                    init(); // Переинициализируем для обновления данных
+                }
+            }
+        }
     }
 
     @Override

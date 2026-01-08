@@ -19,7 +19,7 @@ public class TeamWorldData extends SavedData {
     public Map<UUID, ProfileManager.Profile> getPlayerProfiles() {
         return playerProfiles;
     }
-    private static final String DATA_NAME = TeamMod.MODID + "_teams";
+    public static final String DATA_NAME = TeamMod.MODID + "_teams";
 
     public TeamWorldData() {
     }
@@ -145,7 +145,7 @@ public class TeamWorldData extends SavedData {
         return server.overworld();
     }
 
-    private static TeamWorldData loadFromNBT(CompoundTag nbt) {
+    public static TeamWorldData loadFromNBT(CompoundTag nbt) {
         TeamWorldData data = new TeamWorldData();
         data.load(nbt);
         return data;

@@ -29,7 +29,7 @@ public class DeleteTeamScreen extends Screen {
     // Поле ввода
     private static final int INPUT_U = 11;  // 11.22 округляем до 11
     private static final int INPUT_V = 53;  // 52.59 округляем до 53
-    private static final int INPUT_W = 122; // 133.41 - 11.22 ≈ 122
+    private static final int INPUT_W = 123;   // было 122
     private static final int INPUT_H = 9;   // 61.15 - 52.59 ≈ 9
 
     // Кнопки
@@ -65,8 +65,31 @@ public class DeleteTeamScreen extends Screen {
         int guiX = left();
         int guiY = top();
 
-        // Поле ввода для названия команды
-        inputField = new EditBox(font, guiX + INPUT_U, guiY + INPUT_V, INPUT_W, INPUT_H, Component.empty());
+        int inputX = guiX + INPUT_U;   // теперь не сдвигаем – ширина уже 123
+        int inputY = guiY + INPUT_V;
+
+        inputField = new EditBox(font, inputX, inputY, INPUT_W, INPUT_H, Component.empty()) {
+            @Override
+            public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                if (!this.isVisible()) return;
+
+                String text = this.getValue();
+                int tw = font.width(text);
+                int max = this.width - 8;          // небольшие отступы
+                if (tw > max) text = font.plainSubstrByWidth(text, max);
+
+                int tx = this.getX() + (this.width - font.width(text)) / 2;
+                int ty = this.getY() + (this.height - 8) / 2;
+                g.drawString(font, text, tx, ty, 0xFFFFFF, false);
+
+                // мигающий курсор
+                if (this.isFocused()) {
+                    int curX = tx + font.width(text);
+                    g.fill(curX, ty - 1, curX + 1, ty + 9, 0xFFD0D0D0);
+                }
+            }
+        };
+
         inputField.setBordered(false);
         inputField.setMaxLength(50);
         inputField.setTextColor(0xFFFFFF);
@@ -119,8 +142,9 @@ public class DeleteTeamScreen extends Screen {
     }
 
     private boolean isInputValid() {
-        String expectedText = teamName + (teamTag != null && !teamTag.isEmpty() ? "[" + teamTag + "]" : "");
-        return inputField.getValue().equals(expectedText);
+        // достаточно ввести СВОЙ ник (без тега)
+        String expected = minecraft.player.getGameProfile().getName();
+        return inputField.getValue().trim().equalsIgnoreCase(expected);
     }
 
     private void onCancel() {

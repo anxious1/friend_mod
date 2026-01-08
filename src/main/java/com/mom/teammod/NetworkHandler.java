@@ -65,7 +65,10 @@ public class NetworkHandler {
                 RespondInvitationPacket::decode,
                 RespondInvitationPacket::handle);
         registerMessage(PlayerActivityPacket.class, PlayerActivityPacket::encode, PlayerActivityPacket::decode, PlayerActivityPacket::handle);
-
+        registerMessage(AskMyLeaderTeamsPacket.class,
+                AskMyLeaderTeamsPacket::encode,
+                AskMyLeaderTeamsPacket::decode,
+                AskMyLeaderTeamsPacket::handle);
     }
 
     private static <M> void registerMessage(

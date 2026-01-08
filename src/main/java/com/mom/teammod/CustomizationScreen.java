@@ -6,8 +6,10 @@ import com.mom.teammod.packets.TeamSyncPacket;
 import com.mom.teammod.packets.UpdateTeamSettingsPacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.ImageButton;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
@@ -63,7 +65,64 @@ public class CustomizationScreen extends BaseModScreen {
     @Override
     protected void init() {
         super.init();
+        // ===== CustomizationScreen.java: вставь в самый конец init() ПОСЛЕ super.init(); =====
         int guiX = left();
+        int baseY = top() - 26;
+
+        ResourceLocation unpress = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/unpress.png");
+        ResourceLocation press   = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/press.png");
+
+        ResourceLocation INV_ICON       = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/inv_icon.png");
+        ResourceLocation TEAM_LIST_ICON = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/team_list_icon.png");
+        ResourceLocation PROFILE_ICON   = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/profile_icon.png");
+
+// === КНОПКА ИНВЕНТАРЬ ===
+        this.addRenderableWidget(new ImageButton(guiX + 2, baseY, 26, 27, 0, 0, 0, unpress, button -> {
+            minecraft.setScreen(new InventoryScreen(minecraft.player));
+        }) {
+            private boolean isPressed = false;
+            @Override public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                boolean active = this.isHovered() || isPressed;
+                ResourceLocation tex = active ? press : unpress;
+                int h = active ? 29 : 27;
+                int yOff = active ? -2 : 0;
+                if (this.getHeight() != h) { this.setHeight(h); this.setY(baseY + yOff); }
+                g.blit(tex, getX(), getY(), 0, 0, 26, h, 26, h);
+                g.blit(INV_ICON, getX() + 5, getY() + (active ? 7 : 6), 0, 0, 16, 16, 16, 16);
+                if (this.isHovered()) g.renderTooltip(font, Component.translatable("gui.teammod.inventory"), mx, my);
+            }
+            @Override public void onClick(double mx, double my) { super.onClick(mx, my); this.isPressed = true; }
+        });
+
+// === КНОПКА КОМАНДЫ — ЗАЖАТА ===
+        int teamX = guiX + 2 + 26 + 52;
+        this.addRenderableWidget(new ImageButton(teamX, baseY - 2, 26, 29, 0, 0, 0, press, btn -> {}) {
+            @Override public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                g.blit(press, getX(), getY(), 0, 0, 26, 29, 26, 29);
+                g.blit(TEAM_LIST_ICON, getX() + 5, getY() + 6, 0, 0, 16, 16, 16, 16);
+                if (this.isHovered()) g.renderTooltip(font, Component.translatable("gui.teammod.team_tab"), mx, my);
+            }
+        });
+
+// === КНОПКА ПРОФИЛЬ ===
+        int profileX = teamX + 26;
+        this.addRenderableWidget(new ImageButton(profileX, baseY, 26, 27, 0, 0, 0, unpress, button -> {
+            minecraft.setScreen(new MyProfileScreen(this, Component.translatable("gui.teammod.profile")));
+        }) {
+            private boolean isPressed = false;
+            @Override public void renderWidget(GuiGraphics g, int mx, int my, float pt) {
+                boolean active = this.isHovered() || isPressed;
+                ResourceLocation tex = active ? press : unpress;
+                int h = active ? 29 : 27;
+                int yOff = active ? -2 : 0;
+                if (this.getHeight() != h) { this.setHeight(h); this.setY(baseY + yOff); }
+                g.blit(tex, getX(), getY(), 0, 0, 26, h, 26, h);
+                g.blit(PROFILE_ICON, getX() + 5, getY() + (active ? 7 : 6), 0, 0, 16, 16, 16, 16);
+                if (this.isHovered()) g.renderTooltip(font, Component.translatable("gui.teammod.profile"), mx, my);
+            }
+            @Override public void onClick(double mx, double my) { super.onClick(mx, my); this.isPressed = true; }
+        });
+
         int guiY = top();
 
         // === КНОПКИ ВЫБОРА ЦВЕТА/ФИГУРЫ (clr1, clr2, shape) ===

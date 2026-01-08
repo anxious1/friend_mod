@@ -7,6 +7,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.components.Tooltip;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.InventoryScreen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
@@ -90,7 +91,24 @@ public class LeaveTeamScreen extends Screen {
 
     private void onConfirm() {
         NetworkHandler.INSTANCE.sendToServer(new LeaveTeamPacket(teamName));
-        TeamScreen.returnToTeamScreen();
+
+        minecraft.execute(() -> {
+            // Закрываем всё
+            minecraft.setScreen(null);
+
+            // Открываем инвентарь
+            minecraft.setScreen(new InventoryScreen(minecraft.player));
+
+            // Через 1 тик открываем TeamScreen
+            minecraft.tell(() -> {
+                minecraft.setScreen(new TeamScreen(
+                        null,
+                        new TeamMenu(0, minecraft.player.getInventory()),
+                        minecraft.player.getInventory(),
+                        Component.translatable("gui.teammod.team_tab")
+                ));
+            });
+        });
     }
 
     private void onCancel() {

@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mom.teammod.packets.LeaveTeamPacket;
 import com.mom.teammod.packets.RespondInvitationPacket;
 import com.mom.teammod.packets.UpdateCompassVisibilityPacket;
 import net.minecraft.client.Minecraft;
@@ -36,10 +37,11 @@ public class TeamScreen extends BaseModScreen {
         UUID uuid = minecraft.player.getUUID();
         return ProfileManager.getClientProfile(uuid).isShowOnCompass();
     };
+    private ReloadButton reloadButton;
     private static final int COMPASS_U = 15, COMPASS_V = 208, COMPASS_W = 15, COMPASS_H = 15;  // иконка компаса
     private static final int TAG_U     = 31, TAG_V     = 212, TAG_W     = 28, TAG_H     = 10;   // иконка тега
     private static final int PIMP_DOT_U = 2,  PIMP_DOT_V = 211, PIMP_DOT_W = 10, PIMP_DOT_H = 10;  // маленькая точка пимпа (вкл/выкл)
-
+    private Set<String> lastKnownTeams = new HashSet<>();
     private static final int GUI_WIDTH = 256;
     private static final int GUI_HEIGHT = 170;
 
@@ -118,6 +120,11 @@ public class TeamScreen extends BaseModScreen {
         ResourceLocation INV_ICON       = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/inv_icon.png");
         ResourceLocation TEAM_LIST_ICON = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/team_list_icon.png");
         ResourceLocation PROFILE_ICON   = ResourceLocation.fromNamespaceAndPath(TeamMod.MODID, "textures/gui/profile_icon.png");
+
+        int reloadX = (width - GUI_WIDTH) / 2 + GUI_WIDTH - 20; // Правый верхний угол
+        int reloadY = (height - GUI_HEIGHT) / 2 + 5;
+        addRenderableWidget(new ReloadButton(reloadX, reloadY, this::refreshLists));
+        reloadButton = (ReloadButton) addRenderableWidget(new ReloadButton(reloadX, reloadY, this::refreshLists));
 
         // === КНОПКА ИНВЕНТАРЬ ===
         this.addRenderableWidget(new ImageButton(guiX + 2, baseY, 26, 27, 0, 0, 0, unpress, button -> {
@@ -419,28 +426,33 @@ public class TeamScreen extends BaseModScreen {
     }
 
 
+    // В TeamScreen.java измените rebuildTeamSlots():
     private void rebuildTeamSlots() {
-        // Удаляем ТОЛЬКО плашки и кнопки слотов (с непустым текстом)
-        // Навигационные кнопки и pimp-кнопки имеют Component.empty() — их НЕ трогаем
+        System.out.println("[TeamScreen] rebuildTeamSlots() вызван!");
+
+        // Удаляем старые виджеты
         this.children().removeIf(w -> {
             if (w instanceof Button b) {
-                return !b.getMessage().getString().isEmpty(); // удаляем только кнопки с текстом (JOIN, CREATE, PROFILE, LEAVE в слотах)
+                return !b.getMessage().getString().isEmpty();
             }
-            // Плашки — чистые AbstractWidget (не Button)
             return w instanceof AbstractWidget aw && aw.getClass() == AbstractWidget.class && !(w instanceof Button);
         });
 
         this.renderables.removeIf(w -> w instanceof AbstractWidget aw && aw.getClass() == AbstractWidget.class && !(w instanceof Button));
 
+        // Получаем актуальные данные
         UUID playerId = minecraft.player.getUUID();
         Set<String> myTeamNames = clientPlayerTeams.getOrDefault(playerId, Set.of());
         List<String> myTeams = new ArrayList<>(myTeamNames);
         myTeams.sort(String::compareToIgnoreCase);
 
+        System.out.println("[TeamScreen] Текущие команды игрока: " + myTeams);
+
         int guiX = (width - 256) / 2;
         int guiY = (height - 170) / 2;
         int[] yPositions = {36, 73, 110};
 
+        // Очищаем все старые ссылки
         for (int slot = 0; slot < 3; slot++) {
             int y = yPositions[slot];
 
@@ -448,52 +460,62 @@ public class TeamScreen extends BaseModScreen {
                 String teamName = myTeams.get(slot);
                 TeamManager.Team team = clientTeams.get(teamName);
 
-                int plashkaX = guiX + 10 - 1;
-                int plashkaY = guiY + y - 5 - 5 - 1;
-
-                // Плашка
-                addRenderableOnly(new AbstractWidget(plashkaX, plashkaY, PLASHKA_W, PLASHKA_H, Component.empty()) {
-                    @Override
-                    public void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-                        RenderSystem.setShaderTexture(0, ATLAS);
-                        g.blit(ATLAS, getX(), getY(), PLASHKA_U, PLASHKA_V, PLASHKA_W, PLASHKA_H, 256, 256);
-                        g.blit(ATLAS, getX() + PLASHKA_W - ZVEZDA_W - 4, getY() + 4,
-                                ZVEZDA_U, ZVEZDA_V, ZVEZDA_W, ZVEZDA_H, 256, 256);
-
-                        String tag = team != null ? team.getTag() : "";
-                        String display = teamName + (!tag.isEmpty() ? "[" + tag + "]" : "");
-                        int textX = getX() + PLASHKA_W / 2 - font.width(display) / 2;
-                        int textY = getY() + (PLASHKA_H - 9) / 2;
-                        g.drawString(font, display, textX, textY, 0xFFFFFF, false);
-                    }
-
-                    @Override public boolean isMouseOver(double mx, double my) { return false; }
-
-                    @Override
-                    protected void updateWidgetNarration(NarrationElementOutput output) { }
-                });
-
-                // Кнопки профиля и выхода (только если есть команда)
-                addAtlasButton(guiX + 108 + 5, guiY + y, PROFILE_BTN_W, PROFILE_BTN_H,
-                        PROFILE_BTN_U, PROFILE_BTN_V,
-                        () -> openTeamProfile(teamName),
-                        Component.translatable("gui.teammod.profile"));
-
-                addAtlasButton(guiX + 158 + 3, guiY + y, LEAVE_BTN_W, LEAVE_BTN_H,
-                        LEAVE_BTN_U, LEAVE_BTN_V,
-                        () -> openLeaveTeam(teamName, team),
-                        Component.translatable("gui.teammod.leave_team"));
+                System.out.println("[TeamScreen] Добавляю слот для команды: " + teamName);
+                addTeamSlot(guiX, guiY, y, teamName, team);
             } else {
-                // Пустой слот — только JOIN и CREATE
-                addTransparentButton(guiX + 17, guiY + y, 28, 13,
-                        this::openJoinList,
-                        Component.translatable("gui.teammod.join_team"));
-
-                addTransparentButton(guiX + 58, guiY + y, 43, 13,
-                        this::openCreateTeam,
-                        Component.translatable("gui.teammod.create_team"));
+                System.out.println("[TeamScreen] Добавляю пустой слот");
+                addEmptySlot(guiX, guiY, y);
             }
         }
+
+        System.out.println("[TeamScreen] rebuildTeamSlots() завершен!");
+    }
+
+    // Выделите добавление команды в отдельный метод:
+    private void addTeamSlot(int guiX, int guiY, int y, String teamName, TeamManager.Team team) {
+        int plashkaX = guiX + 10 - 1;
+        int plashkaY = guiY + y - 5 - 5 - 1;
+
+        // Плашка
+        addRenderableOnly(new AbstractWidget(plashkaX, plashkaY, PLASHKA_W, PLASHKA_H, Component.empty()) {
+            @Override
+            public void renderWidget(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+                RenderSystem.setShaderTexture(0, ATLAS);
+                g.blit(ATLAS, getX(), getY(), PLASHKA_U, PLASHKA_V, PLASHKA_W, PLASHKA_H, 256, 256);
+                g.blit(ATLAS, getX() + PLASHKA_W - ZVEZDA_W - 4, getY() + 4,
+                        ZVEZDA_U, ZVEZDA_V, ZVEZDA_W, ZVEZDA_H, 256, 256);
+
+                String tag = team != null ? team.getTag() : "";
+                String display = teamName + (!tag.isEmpty() ? "[" + tag + "]" : "");
+                int textX = getX() + PLASHKA_W / 2 - font.width(display) / 2;
+                int textY = getY() + (PLASHKA_H - 9) / 2;
+                g.drawString(font, display, textX, textY, 0xFFFFFF, false);
+            }
+
+            @Override public boolean isMouseOver(double mx, double my) { return false; }
+            @Override protected void updateWidgetNarration(NarrationElementOutput output) { }
+        });
+
+        // Кнопки
+        addAtlasButton(guiX + 108 + 5, guiY + y, PROFILE_BTN_W, PROFILE_BTN_H,
+                PROFILE_BTN_U, PROFILE_BTN_V,
+                () -> openTeamProfile(teamName),
+                Component.translatable("gui.teammod.profile"));
+
+        addAtlasButton(guiX + 158 + 3, guiY + y, LEAVE_BTN_W, LEAVE_BTN_H,
+                LEAVE_BTN_U, LEAVE_BTN_V,
+                () -> openLeaveTeam(teamName, team),
+                Component.translatable("gui.teammod.leave_team"));
+    }
+
+    private void addEmptySlot(int guiX, int guiY, int y) {
+        addTransparentButton(guiX + 17, guiY + y, 28, 13,
+                this::openJoinList,
+                Component.translatable("gui.teammod.join_team"));
+
+        addTransparentButton(guiX + 58, guiY + y, 43, 13,
+                this::openCreateTeam,
+                Component.translatable("gui.teammod.create_team"));
     }
 
     public void refreshLists() {
@@ -518,6 +540,9 @@ public class TeamScreen extends BaseModScreen {
             this.renderables.removeIf(w -> w instanceof TextureButton);
             renderTeamList(null);
         });
+        this.renderables.removeIf(w -> w instanceof InvitationSlot);
+        renderTeamList(null);
+        rebuildTeamSlots();   // у тебя уже есть
     }
 
     private void renderTeamList(GuiGraphics g) {
@@ -723,5 +748,75 @@ public class TeamScreen extends BaseModScreen {
 
         @Override
         protected void updateWidgetNarration(NarrationElementOutput output) {}
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+
+        // Проверяем каждые 20 тиков (1 секунда)
+        if (minecraft.player != null && minecraft.player.tickCount % 20 == 0) {
+            UUID playerId = minecraft.player.getUUID();
+            Set<String> currentTeams = TeamManager.clientPlayerTeams.getOrDefault(playerId, new HashSet<>());
+            if (!currentTeams.equals(lastKnownTeams)) {
+                lastKnownTeams = new HashSet<>(currentTeams);
+                rebuildTeamSlots();
+            }
+        }
+    }
+    @Override
+    public void onClose() {
+        super.onClose();
+        // При закрытии этого экрана обновляем данные
+        if (minecraft != null && minecraft.player != null) {
+            hardRefresh();
+        }
+    }
+
+    public void forceRefresh() {
+        rebuildTeamSlots();
+        refreshLists();
+    }
+
+    // в TeamScreen
+    public void hardRefresh() {
+        rebuildTeamSlots();   // перестраивает 3 слота по актуальным clientPlayerTeams
+    }
+    // В TeamScreen.java добавьте:
+    public void updateAfterLeaveTeam() {
+        // Принудительно обновляем данные
+        lastKnownTeams.clear();
+        lastKnownTeams.addAll(clientPlayerTeams.getOrDefault(minecraft.player.getUUID(), new HashSet<>()));
+
+        // Полностью перестраиваем интерфейс
+        rebuildTeamSlots();
+
+        // Принудительный ре-рендер
+        if (minecraft != null) {
+            minecraft.execute(() -> {
+                // Закрываем текущий экран и создаем новый
+                minecraft.setScreen(null);
+                TeamScreen newScreen = new TeamScreen(
+                        parentScreen,
+                        new TeamMenu(0, minecraft.player.getInventory()),
+                        minecraft.player.getInventory(),
+                        Component.translatable("gui.teammod.team_tab")
+                );
+                minecraft.setScreen(newScreen);
+            });
+        }
+    }
+    // В TeamScreen.java добавьте:
+    public void hardReset() {
+        // Удаляем ВСЕ виджеты
+        this.children().clear();
+        this.renderables.clear();
+
+        // Сбрасываем состояние
+        this.scrollOffset = 0;
+        this.isDraggingScroller = false;
+
+        // Пересоздаём интерфейс
+        this.init();
     }
 }

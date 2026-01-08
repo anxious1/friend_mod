@@ -398,4 +398,12 @@ public class TeamMod {
         }
     }
 }
+    @SubscribeEvent
+    public static void onServerStarting(net.minecraftforge.event.server.ServerStartingEvent e) {
+        PlayerNameCache.rebuild();
+    }
+    @SubscribeEvent
+    public static void onLogin(PlayerEvent.PlayerLoggedInEvent e) {
+        if (e.getEntity() instanceof ServerPlayer sp) PlayerNameCache.onLogin(sp);
+    }
 }

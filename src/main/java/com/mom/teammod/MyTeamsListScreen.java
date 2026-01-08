@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mom.teammod.packets.AskMyLeaderTeamsPacket;
 import com.mom.teammod.packets.InvitePlayerPacket;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -20,14 +21,15 @@ public class MyTeamsListScreen extends BaseModScreen {
     private static final int PLASHKA_BASIC_U = 0,   PLASHKA_BASIC_V = 207,  PLASHKA_BASIC_W = 168, PLASHKA_BASIC_H = 24;
     private static final int PLASHKA_HOVER_U = 1,   PLASHKA_HOVER_V = 232,  PLASHKA_HOVER_W = 168, PLASHKA_HOVER_H = 24;
     private static final int PLASHKA_CLICKED_U = 0, PLASHKA_CLICKED_V = 183, PLASHKA_CLICKED_W = 169, PLASHKA_CLICKED_H = 24;
-
+    private final List<TeamManager.Team> teamList = new ArrayList<>();
+    private int askCooldown = 0;
     private static final int CONFIRM_U = 0, CONFIRM_V = 147, CONFIRM_W = 47, CONFIRM_H = 14;
-
+    private List<TeamManager.Team> leaderTeams = new ArrayList<>();
     private static final int GUI_WIDTH = 256;
     private static final int GUI_HEIGHT = 147;
     private static final int VISIBLE_SLOTS = 4; // видно одновременно 4 команды (по текстуре)
     private static final int SLOT_HEIGHT = 30;
-
+    private String targetName;
     // Реальные команды игрока
     private List<TeamManager.Team> myTeams = new ArrayList<>();
     public final Set<String> clickedTeams = new HashSet<>();
@@ -35,9 +37,12 @@ public class MyTeamsListScreen extends BaseModScreen {
 
     private Button confirmButton;
 
-    public MyTeamsListScreen(Screen parentScreen) {
+    // новый – с именем цели
+    public MyTeamsListScreen(Screen parentScreen, String targetName) {
         super(parentScreen, Component.literal(""));
-        this.parentScreen = parentScreen;
+        this.targetName = targetName == null ? "" : targetName;
+
+        NetworkHandler.INSTANCE.sendToServer(new AskMyLeaderTeamsPacket());
     }
 
     private int left() { return (width - GUI_WIDTH) / 2; }
@@ -64,7 +69,9 @@ public class MyTeamsListScreen extends BaseModScreen {
             removeWidget(confirmButton);
             confirmButton = null;
         }
-
+        int reloadX = left() + GUI_WIDTH - 20;
+        int reloadY = top() + 5;
+        addRenderableWidget(new ReloadButton(reloadX, reloadY, this::refreshTeamList));
         confirmButton = new Button(
                 x + GUI_WIDTH - CONFIRM_W - 20 - 22 - 32,
                 y + GUI_HEIGHT - CONFIRM_H - 15 - 20 + 11 + 8,
@@ -90,20 +97,21 @@ public class MyTeamsListScreen extends BaseModScreen {
         createTeamButtons();
     }
 
-    private void refreshTeamList() {
-        UUID playerId = minecraft.player.getUUID();
-        Set<String> myTeamNames = TeamManager.clientPlayerTeams.getOrDefault(playerId, Collections.emptySet());
+    public void refreshTeamList() {
+        UUID my = minecraft.player.getUUID();
+        leaderTeams = TeamManager.getLeaderTeams(my);
 
-        myTeams.clear();
-        for (String teamName : myTeamNames) {
-            TeamManager.Team team = TeamManager.clientTeams.get(teamName);
-            if (team != null) {
-                myTeams.add(team);
-            }
+        UUID target = PlayerNameCache.getUUID(targetName);
+        if (target != null) {
+            leaderTeams.removeIf(t -> TeamManager.alreadyInTeamOrInvited(target, t.getName()));
         }
-        myTeams.sort(Comparator.comparing(t -> t.getName()));
-    }
+        leaderTeams.sort(Comparator.comparing(TeamManager.Team::getName));
 
+        /* ➜➜➜ копируем в myTeams, чтобы кнопки их увидели */
+        myTeams.clear();
+        myTeams.addAll(leaderTeams);
+        createTeamButtons();
+    }
     private void createTeamButtons() {
         this.renderables.removeIf(w -> w instanceof TeamButton);
 
@@ -238,5 +246,4 @@ public class MyTeamsListScreen extends BaseModScreen {
             g.drawString(font, displayText, getX() + 10, getY() + 8, 0xFFFFFF, false);
         }
     }
-
 }

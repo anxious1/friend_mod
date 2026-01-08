@@ -37,7 +37,7 @@ public class TeamManager {
     private static final int MAX_TEAMS_PER_PLAYER = 3;
     private static final Map<UUID, PlayerStatsData> serverPlayerStats = new HashMap<>();
     public static final Map<UUID, PlayerStatsData> clientPlayerStats = new HashMap<>();
-
+    private static TeamWorldData clientFallback;
     public static class Team implements INBTSerializable<CompoundTag> {
         private final String name;
         private boolean inviteOnly = true;
@@ -51,7 +51,6 @@ public class TeamManager {
         // ← ТВОИ НОВЫЕ ПОЛЯ (теперь приватные + с геттерами/сеттерами)
         private boolean showTag = true;
         private boolean showCompass = true;
-
         public Team(String name, UUID owner) {
             this.name = name;
             this.owner = owner;
@@ -163,7 +162,8 @@ public class TeamManager {
 
     public static boolean createTeam(String teamName, String tag, boolean friendlyFire, boolean showTag, boolean showCompass, Player owner) {
         System.out.println("[TeamManager] createTeam вызван: " + teamName + " от " + owner.getName().getString());
-
+        String safeTag = CensorService.getInstance().getSafeTag(tag);
+        String safeName = CensorService.getInstance().getSafeName(teamName);
         if (!(owner instanceof ServerPlayer serverOwner)) {
             System.out.println("[TeamManager] owner не ServerPlayer");
             return false;
@@ -176,12 +176,31 @@ public class TeamManager {
             return false;
         }
 
+        if (!tag.equals(safeTag)) {
+            // брань в теге → заменяем тег
+            tag = safeTag;
+        }
+        if (!teamName.equals(safeName)) {
+            // брань в названии → заменяем название
+            teamName = safeName;
+        }
+
         Map<String, TeamManager.Team> teams = data.getTeams();
         Map<UUID, Set<String>> playerTeams = data.getPlayerTeams();
 
         Set<String> ownerTeams = playerTeams.computeIfAbsent(owner.getUUID(), k -> new HashSet<>());
 
-        if (teams.containsKey(teamName) || ownerTeams.size() >= MAX_TEAMS_PER_PLAYER) {
+        // ✅ Добавим отладку
+        System.out.println("[TeamManager] Проверка: teams.containsKey(" + teamName + ") = " + teams.containsKey(teamName));
+        System.out.println("[TeamManager] Текущие команды игрока: " + ownerTeams.size());
+
+        if (teams.containsKey(teamName)) {
+            System.out.println("[TeamManager] ⚠️ Команда '" + teamName + "' уже существует в TeamWorldData!");
+            serverOwner.sendSystemMessage(Component.literal("§cКоманда с таким именем уже существует."));
+            return false;
+        }
+
+        if (ownerTeams.size() >= MAX_TEAMS_PER_PLAYER) {
             serverOwner.sendSystemMessage(Component.literal("§cНе удалось создать команду. Проверьте имя и лимит (макс. 3)."));
             return false;
         }
@@ -193,7 +212,7 @@ public class TeamManager {
         team.setShowCompass(showCompass);
 
         teams.put(teamName, team);
-        ownerTeams.add(teamName);  // ← Теперь добавляется в настоящий HashSet!
+        ownerTeams.add(teamName);
 
         data.setDirty(true);
 
@@ -202,11 +221,9 @@ public class TeamManager {
 
         System.out.println("[TeamManager] Команда создана на сервере. Отправляем синхронизацию...");
 
-        // Принудительно отправляем очистку + новую команду владельцу
         NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> serverOwner), new TeamSyncPacket());
         NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> serverOwner), new TeamSyncPacket(teamName, team.serializeNBT()));
 
-        // И всем остальным
         syncAllTeamsToAllPlayers();
 
         return true;
@@ -406,40 +423,29 @@ public class TeamManager {
         Team team = teams.get(teamName);
         if (team == null || !team.getMembers().contains(playerUUID)) return null;
 
-        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-        ServerPlayer player = server != null ? server.getPlayerList().getPlayer(playerUUID) : null;
-
-        boolean wasOwner = team.getOwner().equals(playerUUID);
-        boolean teamWillBeDisbanded = team.getMembers().size() == 1;
-
-        /* передача лидерства, если нужно */
-        if (wasOwner && !teamWillBeDisbanded) {
-            UUID newOwner = team.getMembers().stream()
-                    .filter(uuid -> !uuid.equals(playerUUID))
-                    .findFirst()
-                    .orElse(null);
-            if (newOwner != null) {
-                team.owner = newOwner;
-                ServerPlayer newOwnerPlayer = server.getPlayerList().getPlayer(newOwner);
-                if (newOwnerPlayer != null) {
-                    newOwnerPlayer.sendSystemMessage(
-                            Component.literal("§aВы стали новым лидером команды §f" + teamName));
-                }
-            }
-        }
-
-        /* удаляем игрока */
+        // Удаляем игрока
         team.removeMember(playerUUID);
         playerTeams.computeIfAbsent(playerUUID, k -> new HashSet<>()).remove(teamName);
 
-        /* сообщения */
-        if (player != null) {
-            player.sendSystemMessage(
-                    Component.literal("§aВы покинули команду §f" + teamName));
+        // ❗❗❗ ВАЖНО: если в команде никого не осталось — удаляем её полностью
+        if (team.getMembers().isEmpty()) {
+            teams.remove(teamName);
+            data.setDirty(true);
+
+            // Рассылаем всем пакет на удаление
+            MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+            if (server != null) {
+                TeamSyncPacket delPacket = new TeamSyncPacket(teamName); // null-данные = удаление
+                server.getPlayerList().getPlayers().forEach(p ->
+                        NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> p), delPacket)
+                );
+            }
+
+            return null; // команда удалена
         }
 
         data.setDirty(true);
-        return team;   // важно: возвращаем объект команды
+        return team; // команда жива
     }
 
     public static boolean kickPlayer(String teamName, UUID targetUUID, UUID kickerUUID) {
@@ -568,15 +574,17 @@ public class TeamManager {
             return false;
         }
 
-        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-        for (UUID memberUUID : new HashSet<>(team.getMembers())) {
-            ServerPlayer p = server != null ? server.getPlayerList().getPlayer(memberUUID) : null;
-            data.getPlayerTeams().computeIfAbsent(memberUUID, k -> new HashSet<>()).remove(teamName);
-            if (p != null) {
-                p.sendSystemMessage(Component.literal("§cКоманда §f" + teamName + "§c была удалена лидером"));
-            }
+        // ✅ Удаляем из мира
+        data.getTeams().remove(teamName);
+        System.out.println("[TeamManager] Удалена команда '" + teamName + "', осталось команд: " + data.getTeams().size());
+
+        // ✅ Удаляем у игроков
+        for (UUID uuid : new HashSet<>(data.getPlayerTeams().keySet())) {
+            data.getPlayerTeams().get(uuid).remove(teamName);
         }
 
+        // ✅ Уведомления
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         for (UUID invited : new HashSet<>(team.getInvited())) {
             ServerPlayer p = server != null ? server.getPlayerList().getPlayer(invited) : null;
             if (p != null) {
@@ -586,9 +594,19 @@ public class TeamManager {
 
         sendAchievementToTeam(teamName, "Команда удалена", "Команда §b" + teamName + " была удалена", "BARRIER", false);
 
-        data.getTeams().remove(teamName);
+        // ✅ Сохраняем на диск
         data.setDirty(true);
+        if (server != null) {
+            ServerLevel overworld = server.overworld();
+            if (overworld != null) {
+                overworld.getDataStorage().save();
+                System.out.println("[TeamManager] Удалена команда '" + teamName + "' и сохранено на диск.");
+            }
+        }
+
+        // ✅ Рассылаем пакет на удаление (без пустой команды)
         syncTeamToAll(teamName);
+
         return true;
     }
 
@@ -665,7 +683,6 @@ public class TeamManager {
         clientTeams.entrySet().removeIf(entry -> entry.getValue().getMembers().isEmpty());
     }
 
-    // 1. Универсальный метод — вставь его один раз в класс
     public static void syncTeamToAll(String teamName) {
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
         if (server == null) return;
@@ -673,10 +690,10 @@ public class TeamManager {
         TeamWorldData data = getData();
         if (data == null) return;
 
-        TeamManager.Team team = data.getTeams().get(teamName);
+        TeamManager.Team team = data.getTeams().get(teamName); // ← теперь null, если удалена
         TeamSyncPacket packet = team != null
                 ? new TeamSyncPacket(teamName, team.serializeNBT())
-                : new TeamSyncPacket(teamName); // null data = удаление
+                : new TeamSyncPacket(teamName); // ← отправит пакет на удаление
 
         for (ServerPlayer player : server.getPlayerList().getPlayers()) {
             NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), packet);
@@ -707,34 +724,35 @@ public class TeamManager {
 
     @SubscribeEvent
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) {
-            // Создаём профиль сразу
-            ProfileManager.Profile profile = ProfileManager.getProfile(player.serverLevel(), player.getUUID());
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
-            // Синхронизируем обычный профиль (background и т.д.)
-            ProfileManager.syncProfileToClient(player);
+        ServerLevel overworld = player.server.overworld();
+        if (overworld != null) TeamWorldData.get(overworld); // инициализация
 
-            // Откладываем на 1 тик — handshake завершён
-            player.server.submitAsync(() -> {
-                // 📊 Статистика
-                PlayerStatsData stats = new PlayerStatsData(player.getStats());
-                TeamManager.serverPlayerStats.put(player.getUUID(), stats);
-                NetworkHandler.INSTANCE.send(
-                        PacketDistributor.PLAYER.with(() -> player),
-                        new StatsSyncPacket(player.getUUID(), stats)
-                );
-
-                // 🏰 Арены (RaidPortals)
-                RaidPortalsSavedData savedData = RaidPortalsSavedData.get(player.serverLevel());
-                RaidPortalsSavedData.PlayerPortalData pd = savedData.playerPortals.get(player.getUUID());
-                if (pd != null) {
+        /* --- отдать оффлайн-приглашения --- */
+        player.server.submitAsync(() -> {
+            UUID uuid = player.getUUID();
+            Set<String> invited = new HashSet<>();
+            for (Team t : getData().getTeams().values()) {
+                if (t.getInvited().contains(uuid)) invited.add(t.getName());
+            }
+            if (!invited.isEmpty()) {
+                NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new TeamSyncPacket()); // очистка
+                for (String tn : invited) {
                     NetworkHandler.INSTANCE.send(
                             PacketDistributor.PLAYER.with(() -> player),
-                            new RaidPortalsSyncPacket(pd.completedTier1, pd.completedTier2, pd.completedTier3)
+                            new TeamSyncPacket(tn, getData().getTeams().get(tn).serializeNBT())
                     );
                 }
-            });
-        }
+            }
+
+            /* остальное ваше */
+            syncAllTeamsToAllPlayers();
+            ProfileManager.syncProfileToClient(player);
+            PlayerStatsData stats = new PlayerStatsData(player.getStats());
+            serverPlayerStats.put(uuid, stats);
+            NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new StatsSyncPacket(uuid, stats));
+        });
     }
 
     @SubscribeEvent
@@ -810,5 +828,20 @@ public class TeamManager {
         for (UUID u : t.getMembers())
             if (PlayerStatus.get(u) != PlayerStatus.Status.OFFLINE) on++;
         return new int[]{on, t.getMembers().size()};
+    }
+
+    public static List<Team> getLeaderTeams(UUID player) {
+        TeamWorldData data = getData();
+        if (data == null) return Collections.emptyList();
+        return data.getTeams().values()
+                .stream()
+                .filter(t -> player.equals(t.getOwner()))
+                .collect(Collectors.toList());
+    }
+
+    /* 2. Уже приглашён или уже участник */
+    public static boolean alreadyInTeamOrInvited(UUID player, String teamName) {
+        Team t = getData().getTeams().get(teamName);
+        return t == null || t.getMembers().contains(player) || t.getInvited().contains(player);
     }
 }

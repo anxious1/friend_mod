@@ -2,6 +2,7 @@ package com.mom.teammod.packets;
 
 import com.mom.teammod.LastActivityTracker;
 import com.mom.teammod.NetworkHandler;
+import com.mom.teammod.PlayerNameCache;
 import com.mom.teammod.TeamManager;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.ClickEvent;
@@ -11,6 +12,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraftforge.network.NetworkEvent;
 import net.minecraftforge.network.PacketDistributor;
 
+import java.util.UUID;
 import java.util.function.Supplier;
 
 public class InvitePlayerPacket {
@@ -32,48 +34,43 @@ public class InvitePlayerPacket {
     }
 
     public static void handle(InvitePlayerPacket pkt, Supplier<NetworkEvent.Context> ctx) {
-
         ctx.get().enqueueWork(() -> {
             LastActivityTracker.update(ctx.get().getSender().getUUID());
             ServerPlayer inviter = ctx.get().getSender();
             if (inviter == null) return;
 
+            /* поиск цели */
             ServerPlayer invited = inviter.getServer().getPlayerList().getPlayerByName(pkt.playerName);
-
-            if (invited == null) {
-                inviter.sendSystemMessage(Component.literal("§cИгрок не найден или не в сети."));
+            UUID target = invited == null
+                    ? PlayerNameCache.getUUID(pkt.playerName)   // оффлайн
+                    : invited.getUUID();
+            if (target == null) {
+                inviter.sendSystemMessage(Component.literal("§cИгрок не найден."));
                 return;
             }
 
-            // Попытка приглашения
-            boolean success = TeamManager.invitePlayer(pkt.teamName, invited.getUUID(), inviter);
-
-            if (success) {
-                // Красивое сообщение приглашённому
-                Component acceptButton = Component.literal("[Принять]")
-                        .withStyle(style -> style
-                                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/teammod_accept " + pkt.teamName))
-                                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("§aПринять приглашение"))));
-
-                Component declineButton = Component.literal("[Отклонить]")
-                        .withStyle(style -> style
-                                .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/teammod_decline " + pkt.teamName))
-                                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("§cОтклонить приглашение"))));
-
-                invited.sendSystemMessage(
-                        Component.literal("§eВы получили приглашение в команду §b" + pkt.teamName + " §eот §f" + inviter.getName().getString() + "§e. ")
-                                .append(acceptButton)
-                                .append(Component.literal(" "))
-                                .append(declineButton)
-                );
-
-                inviter.sendSystemMessage(Component.literal("§aПриглашение отправлено игроку §f" + pkt.playerName));
-            } else {
-                inviter.sendSystemMessage(Component.literal("§cНе удалось отправить приглашение (возможно, лимит команд или уже приглашён)."));
+            /* собственно приглашение */
+            boolean ok = TeamManager.invitePlayer(pkt.teamName, target, inviter);
+            if (!ok) {
+                inviter.sendSystemMessage(Component.literal("§cУже в команде / уже приглашён."));
+                return;
             }
 
-            // КРИТИЧЕСКИ ВАЖНО: синхронизируем состояние команды ВСЕМ игрокам в ЛЮБОМ случае
-            // Это полностью решает проблему с удалением команды при повторном приглашении
+            /* сообщения */
+            if (invited != null) { // онлайн
+                Component accept = Component.literal("[Принять]")
+                        .withStyle(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/teammod_accept " + pkt.teamName))
+                                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("§aПринять"))));
+                Component decline = Component.literal("[Отклонить]")
+                        .withStyle(s -> s.withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/teammod_decline " + pkt.teamName))
+                                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("§cОтклонить"))));
+                invited.sendSystemMessage(
+                        Component.literal("§eПриглашение в §b" + pkt.teamName + " §eот §f" + inviter.getName().getString() + "§e. ")
+                                .append(accept).append(" ").append(decline)
+                );
+            }
+            inviter.sendSystemMessage(Component.literal("§aПриглашение отправлено."));
+
             TeamManager.syncTeamToAll(pkt.teamName);
         });
         ctx.get().setPacketHandled(true);

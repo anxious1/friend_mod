@@ -68,6 +68,10 @@ public class TeamSyncPacket {
                 TeamManager.clientTeams.remove(pkt.teamName);
                 TeamManager.clientPlayerTeams.values().forEach(set -> set.remove(pkt.teamName));
                 System.out.println("[Client] Команда удалена: " + pkt.teamName);
+                Minecraft.getInstance().execute(() -> {
+                    Screen s = Minecraft.getInstance().screen;
+                    if (s instanceof TeamScreen ts) ts.refreshLists();
+                });
             } else {
                 // Создание или обновление команды
                 TeamManager.Team team = new TeamManager.Team(pkt.teamName, null);
@@ -117,6 +121,14 @@ public class TeamSyncPacket {
             if (current instanceof CustomizationScreen customScreen) {
                 customScreen.refreshFromSync();
             }
+
+            if (current instanceof MyTeamsListScreen myTeamsScreen) {
+                myTeamsScreen.refreshTeamList(); // у тебя уже есть этот публичный метод
+            }
+            if (current instanceof TeamScreen teamScreen) {
+                teamScreen.hardRefresh();   // ← новая строка
+            }
         });
+
     }
 }

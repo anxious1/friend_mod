@@ -32,7 +32,7 @@ public class PlayersListScreen extends BaseModScreen {
     private static final int PLASHKA_OFFLINE_V = 208;
     private static final int PLASHKA_OFFLINE_W = 167;  // оставляем 168
     private static final int PLASHKA_OFFLINE_H = 23;
-
+    private TeamProfileOwner teamProfileOwner;
     private static final int ZVEZDA_U = 1;
     private static final int ZVEZDA_V = 194;
     private static final int ZVEZDA_W = 7;
@@ -75,6 +75,7 @@ public class PlayersListScreen extends BaseModScreen {
         super(parentScreen, Component.literal(""));
         this.parent = parent;
         this.teamName = teamName;
+        this.teamProfileOwner = teamProfileOwner;
     }
 
     private int left() { return (width - GUI_WIDTH) / 2; }
@@ -91,10 +92,12 @@ public class PlayersListScreen extends BaseModScreen {
         searchBox.setTextColor(0xFFFFFF);
         searchBox.setResponder(this::onSearchChanged);
         addRenderableWidget(searchBox);
-
+        int reloadX = left() + GUI_WIDTH - 20;
+        int reloadY = top() + 5;
+        addRenderableWidget(new ReloadButton(reloadX, reloadY, this::refreshFromSync));
         // Замени свою кнопку "Назад" на эту:
         addRenderableWidget(new Button(left() + 10 + 22, top() + 179 - 38, 30, 12, Component.empty(),
-                button -> minecraft.setScreen(parent),
+                button -> this.onClose(),
                 (supplier) -> Component.literal("Назад"))  // ← вот так правильно
         {
             @Override
@@ -151,6 +154,7 @@ public class PlayersListScreen extends BaseModScreen {
 
     public void refreshFromSync() {
         refreshPlayerList();
+        repositionSlots();
     }
 
 
@@ -499,4 +503,9 @@ public class PlayersListScreen extends BaseModScreen {
     @Override
     public boolean isPauseScreen() { return false; }
 
+    @Override
+    public void onClose() {
+        if (teamProfileOwner != null) minecraft.setScreen(teamProfileOwner);
+        else super.onClose();                 // fallback
+    }
 }
