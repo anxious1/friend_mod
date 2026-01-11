@@ -179,6 +179,7 @@ public class OtherTeamProfileScreen extends BaseModScreen {
 
         addJoinTeamButton(guiX + (67-7+9) + OFFSET_X/4, guiY + 105+1 + OFFSET_Y/4, 56, 11);
         createPlayerButtons(guiX, guiY);
+        
     }
 
     private void createPlayerButtons(int guiX, int guiY) {
@@ -527,9 +528,7 @@ public class OtherTeamProfileScreen extends BaseModScreen {
                 String oldName = btn.getMessage().getString();
                 String newName = getNameSafe(uuid);
 
-                if (!newName.equals(oldName) && !"Loading...".equals(newName)) {
-                    btn.setMessage(Component.literal(newName));
-                }
+                if (newName != null && !newName.equals(oldName) && !"Loading...".equals(newName));
             }
         }
     }

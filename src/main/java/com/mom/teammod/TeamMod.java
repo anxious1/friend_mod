@@ -398,9 +398,12 @@ public class TeamMod {
         }
     }
 }
-    @SubscribeEvent
-    public static void onServerStarting(net.minecraftforge.event.server.ServerStartingEvent e) {
-        PlayerNameCache.rebuild();
+    public static void onServerStarting(ServerStartingEvent e) {
+        PlayerNameCache.rebuild();               // было
+        // новое: загружаем имена из мира
+        TeamWorldData.get(e.getServer().overworld())
+                .getNameMap()
+                .forEach((uuid,name)-> PlayerNameCache.NAME_UUID.put(name.toLowerCase(), uuid));
     }
     @SubscribeEvent
     public static void onLogin(PlayerEvent.PlayerLoggedInEvent e) {

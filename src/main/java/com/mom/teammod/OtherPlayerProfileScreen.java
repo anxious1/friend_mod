@@ -2,6 +2,7 @@ package com.mom.teammod;
 
 import com.mojang.authlib.GameProfile;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
 import com.mom.teammod.packets.InvitePlayerPacket;
 import com.mom.teammod.packets.RequestProfilePacket;
 import com.mom.teammod.packets.RespondInvitationPacket;
@@ -19,6 +20,9 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.simpleraces.network.SimpleracesModVariables;
+import org.joml.Matrix3f;
+import org.joml.Matrix4f;
+import org.joml.Quaternionf;
 
 import java.util.Comparator;
 
@@ -121,14 +125,14 @@ public class OtherPlayerProfileScreen extends BaseModScreen {
     public void tick() {
         super.tick();
         ProfileManager.Profile prof = ProfileManager.getClientProfile(targetPlayerId);
-        if ("Unknown".equals(prof.getGameProfile().getName())) {
-            // ещё не пришло – повторно запросим (на всякий случай)
-            NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(targetPlayerId));
+        String cached = ClientPlayerNameCache.getName(targetPlayerId);
+        if (!prof.getGameProfile().getName().equals("Unknown")) {
+            playerName = prof.getGameProfile().getName();
+        } else if (cached != null) {
+            playerName = cached;
         } else {
-            // обновляем имя и перерисовываем
-            if ("Unknown".equals(playerName)) {
-                playerName = prof.getGameProfile().getName();
-            }
+            // первый раз – запросим у сервера
+            NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(targetPlayerId));
         }
     }
 
@@ -203,6 +207,9 @@ public class OtherPlayerProfileScreen extends BaseModScreen {
                 }
                 @Override public void onClick(double mx, double my) { super.onClick(mx, my); this.isPressed = true; }
             });
+            if (!ClientPlayerCache.hasMet(targetPlayerId)) {
+                NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(targetPlayerId));
+            }
         }
 
         int guiX = (width - GUI_WIDTH) / 2;
@@ -238,11 +245,6 @@ public class OtherPlayerProfileScreen extends BaseModScreen {
                 Component.literal("Подробная статистика"));
 
         // Реальное имя игрока (если это профиль игрока)
-        Player realPlayer = minecraft.level.getPlayerByUUID(targetPlayerId);
-        if (realPlayer != null) {
-            this.playerName = realPlayer.getName().getString();
-        }
-
         renderTeamList(null);
     }
 
@@ -395,15 +397,18 @@ public class OtherPlayerProfileScreen extends BaseModScreen {
     }
 
     private void renderSkin(GuiGraphics g, int mx, int my) {
+        if (ClientState.hidePlayerRender) return; // тот же флаг
+
         int frameX = (width - GUI_WIDTH) / 2 + FRAME_MARGIN_LEFT;
         int frameY = (height - GUI_HEIGHT) / 2 + (GUI_HEIGHT - SKIN_FRAME_HEIGHT) / 2 - 13;
         int playerX = frameX + SKIN_FRAME_WIDTH / 2;
         int playerY = frameY + SKIN_FRAME_HEIGHT - 10;
 
+        // --- тот же блок определения entityToRender, что и раньше ---
         Player realPlayer = minecraft.level.getPlayerByUUID(targetPlayerId);
         ProfileManager.Profile profile = ProfileManager.getClientProfile(targetPlayerId);
 
-        /* 1. Игрок онлайн – рисуем живого, обновляем кэш */
+        Player entityToRender;
         if (realPlayer != null && realPlayer.isAlive()) {
             ItemStack[] equipment = new ItemStack[4];
             for (int i = 0; i < 4; i++) {
@@ -412,42 +417,27 @@ public class OtherPlayerProfileScreen extends BaseModScreen {
             ClientPlayerCache.onPlayerSeen(targetPlayerId, realPlayer.getGameProfile(), equipment);
             profile.setGameProfile(realPlayer.getGameProfile());
             profile.setLastEquipment(equipment);
-
-            InventoryScreen.renderEntityInInventoryFollowsMouse(
-                    g, playerX, playerY, 38,
-                    (float) playerX - mx,
-                    (float) (frameY + SKIN_FRAME_HEIGHT / 2) - my,
-                    realPlayer);
-            return;
-        }
-
-        /* 2. Оффлайн, но уже встречали – берём данные из кэша */
-        if (ClientPlayerCache.hasMet(targetPlayerId)) {
+            entityToRender = realPlayer;
+        } else if (ClientPlayerCache.hasMet(targetPlayerId)) {
             GameProfile gp = ClientPlayerCache.getGameProfile(targetPlayerId);
             ItemStack[] equipment = ClientPlayerCache.getLastEquipment(targetPlayerId);
-
             Player temp = new RemotePlayer(minecraft.level, gp);
             for (int i = 0; i < 4; i++) {
                 temp.setItemSlot(EquipmentSlot.byTypeAndIndex(EquipmentSlot.Type.ARMOR, i), equipment[i]);
             }
-
-            InventoryScreen.renderEntityInInventoryFollowsMouse(
-                    g, playerX, playerY, 38,
-                    (float) playerX - mx,
-                    (float) (frameY + SKIN_FRAME_HEIGHT / 2) - my,
-                    temp);
-            return;
+            entityToRender = temp;
+        } else {
+            GameProfile unknown = new GameProfile(targetPlayerId, profile.getGameProfile().getName());
+            entityToRender = new RemotePlayer(minecraft.level, unknown);
         }
+        // --- конец блока определения entityToRender ---
 
-        /* 3. Никогда не встречались – рисуем default-скин, но ник берём из профиля */
-        GameProfile unknown = new GameProfile(targetPlayerId, profile.getGameProfile().getName());
-        Player temp = new RemotePlayer(minecraft.level, unknown);
-
+        // --- тот же вызов, что в MyProfileScreen ---
         InventoryScreen.renderEntityInInventoryFollowsMouse(
                 g, playerX, playerY, 38,
                 (float) playerX - mx,
                 (float) (frameY + SKIN_FRAME_HEIGHT / 2) - my,
-                temp);
+                entityToRender);
     }
 
     private void renderNickname(GuiGraphics g) {
@@ -489,29 +479,64 @@ public class OtherPlayerProfileScreen extends BaseModScreen {
         int baseY = (height - GUI_HEIGHT) / 2;
 
         ProfileManager.Profile profile = ProfileManager.getClientProfile(targetPlayerId);
-        String raceLabel = profile.getRace().isEmpty() ? "Human" : profile.getRace();
-        int raceU = switch (raceLabel) {
-            case "aracha"   -> 1;
-            case "dragon"   -> 11;
-            case "dwarf"    -> 21;
-            case "elf"      -> 31;
-            case "fairy"    -> 41;
-            case "halfdead" -> 51;
-            case "merfolk"  -> 61;
-            case "orc"      -> 71;
-            case "serpentin"-> 81;
-            case "werewolf" -> 91;
-            default         -> HUMAN_U;
-        };
+        String raceLabel = profile.getRace();
+        int raceU = HUMAN_U; // 81 — дефолт
 
-        // рисуем иконку и текст
+        // Если раса не сохранена в профиле - пробуем получить из capability
+        if (raceLabel.isEmpty()) {
+            Player player = minecraft.level.getPlayerByUUID(targetPlayerId);
+            if (player != null) {
+                var cap = player.getCapability(SimpleracesModVariables.PLAYER_VARIABLES_CAPABILITY, null).orElse(null);
+                if (cap != null && cap.selected) {
+                    raceLabel = getRaceFromCapability(cap);
+                }
+            }
+
+            // Если все еще пусто - показываем "Не выбрана"
+            if (raceLabel.isEmpty()) {
+                raceLabel = "Не выбрана";
+                raceU = HUMAN_U; // Можно использовать любую иконку-заглушку
+            }
+        } else {
+            // Раса есть в профиле - определяем иконку
+            raceU = switch (raceLabel) {
+                case "aracha" -> 1;
+                case "dragon" -> 11;
+                case "dwarf" -> 21;
+                case "elf" -> 31;
+                case "fairy" -> 41;
+                case "halfdead" -> 51;
+                case "merfolk" -> 61;
+                case "orc" -> 71;
+                case "serpentin" -> 81;
+                case "werewolf" -> 91;
+                default -> HUMAN_U;
+            };
+        }
+
+        // Иконка расы
         g.blit(ATLAS, baseX + 111 + 41 - 74 - 20 - 20 - 18,
                 baseY + 96 + 123 - 194 + 5 + 5,
                 raceU, HUMAN_V, HUMAN_W, HUMAN_H, 256, 256);
 
+        // Текст расы (центрированный)
         int textX = getHumanTextX(raceLabel);
         int textY = baseY + 96 + 2;
         g.drawString(font, raceLabel, textX, textY, 0xFFFFFF, false);
+    }
+
+    private String getRaceFromCapability(SimpleracesModVariables.PlayerVariables cap) {
+        if (cap.aracha) return "Aracha";
+        if (cap.dragon) return "Dragon";
+        if (cap.dwarf) return "Dwarf";
+        if (cap.elf) return "Elf";
+        if (cap.fairy) return "Fairy";
+        if (cap.halfdead) return "Halfdead";
+        if (cap.merfolk) return "Merfolk";
+        if (cap.orc) return "Orc";
+        if (cap.serpentin) return "Serpentin";
+        if (cap.werewolf) return "Werewolf";
+        return ""; // Пусто если не выбрано ничего
     }
 
     // Остальные методы копируются из MyProfileScreen без изменений

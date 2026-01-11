@@ -1,7 +1,9 @@
 package com.mom.teammod;
 
+import com.mojang.authlib.GameProfile;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mom.teammod.packets.KickPlayerPacket;
+import com.mom.teammod.packets.RequestProfilePacket;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
@@ -143,13 +145,11 @@ public class PlayersListScreen extends BaseModScreen {
 
         UUID ownerId = team.getOwner();
         for (UUID memberId : team.getMembers()) {
-            Player p = minecraft.level != null ? minecraft.level.getPlayerByUUID(memberId) : null;
-            boolean online = p != null;
-            String name = p != null ? p.getName().getString() : "Неизвестно";
+            String name = getNameSafe(memberId);          // ← новый хелпер
+            boolean online = isOnline(memberId);          // ← новый хелпер
             allPlayers.add(new PlayerEntry(memberId, name, online, memberId.equals(ownerId)));
         }
-
-        applySearchFilter(); // обновляем отображение
+        applySearchFilter();
     }
 
     public void refreshFromSync() {
@@ -157,7 +157,21 @@ public class PlayersListScreen extends BaseModScreen {
         repositionSlots();
     }
 
-
+    /* ---------- HELPERS ---------- */
+    private String getNameSafe(UUID id) {
+        GameProfile gp = ClientPlayerCache.getGameProfile(id);
+        if (gp == null || "Unknown".equals(gp.getName())) {
+            NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(id));
+            return PlayerNameCache.getName(id);
+        }
+        return gp.getName();
+    }
+    private boolean isOnline(UUID id) {
+        return ClientPlayerCache.isOnline(id);
+    }
+    private GameProfile getProfileSafe(UUID id) {
+        return ClientPlayerCache.getGameProfile(id);
+    }
     private void repositionSlots() {
         // ШАГ 1: Удаляем ВСЕ PlayerSlotWidget И ВСЕ вложенные nameButton
         List<AbstractWidget> toRemove = new ArrayList<>();

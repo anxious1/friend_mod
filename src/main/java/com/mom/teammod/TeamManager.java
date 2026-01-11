@@ -38,6 +38,7 @@ public class TeamManager {
     private static final Map<UUID, PlayerStatsData> serverPlayerStats = new HashMap<>();
     public static final Map<UUID, PlayerStatsData> clientPlayerStats = new HashMap<>();
     private static TeamWorldData clientFallback;
+    private static TeamWorldData cachedData = null;
     public static class Team implements INBTSerializable<CompoundTag> {
         private final String name;
         private boolean inviteOnly = true;
@@ -270,28 +271,15 @@ public class TeamManager {
     }
 
     public static TeamWorldData getData() {
+        if (cachedData != null) return cachedData;
+
         MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
-        if (server == null) {
-            System.out.println("[TeamManager.getData] server == null");
-            return null;
-        }
+        if (server == null) return null;
 
-        ServerLevel overworld = server.overworld();
-        if (overworld == null) {
-            System.out.println("[TeamManager.getData] overworld == null");
-            return null;
-        }
-
-        TeamWorldData data = TeamWorldData.get(overworld);
-
-        if (data == null) {
-            System.out.println("[TeamManager.getData] data == null после TeamWorldData.get()");
-        } else {
-            System.out.println("[TeamManager.getData] data OK! teams.size() = " + data.getTeams().size());
-        }
-
-        return data;
+        cachedData = TeamWorldData.get(server.overworld());
+        return cachedData;
     }
+
 
     public static boolean acceptInvitation(String teamName, UUID player) {
         TeamWorldData data = getData();
@@ -324,6 +312,10 @@ public class TeamManager {
         data.setDirty(true);
         syncTeamToAll(teamName);
         return true;
+    }
+
+    public static void invalidateCache() {
+        cachedData = null;
     }
 
     public static boolean declineInvitation(String teamName, UUID player) {
@@ -729,9 +721,18 @@ public class TeamManager {
         ServerLevel overworld = player.server.overworld();
         if (overworld != null) TeamWorldData.get(overworld); // инициализация
 
-        /* --- отдать оффлайн-приглашения --- */
         player.server.submitAsync(() -> {
             UUID uuid = player.getUUID();
+
+            // 🔥 ОТПРАВЛЯЕМ ВСЕ ПРОФИЛИ ИГРОКУ
+            TeamWorldData data = getData();
+            if (data != null) {
+                for (Map.Entry<UUID, ProfileManager.Profile> entry : data.getPlayerProfiles().entrySet()) {
+                    ProfileManager.syncProfileToClient(player, entry.getKey(), entry.getValue());
+                }
+            }
+
+            // --- отдать оффлайн-приглашения ---
             Set<String> invited = new HashSet<>();
             for (Team t : getData().getTeams().values()) {
                 if (t.getInvited().contains(uuid)) invited.add(t.getName());
@@ -747,12 +748,23 @@ public class TeamManager {
             }
 
             /* остальное ваше */
-            syncAllTeamsToAllPlayers();
+
             ProfileManager.syncProfileToClient(player);
+            // 🔥 ОТПРАВЛЯЕМ ВСЕ ПРОФИЛИ ВСЕМ ИГРОКАМ
+            MinecraftServer server = player.getServer();
+            if (server != null) {
+                for (ServerPlayer onlinePlayer : server.getPlayerList().getPlayers()) {
+                    for (Map.Entry<UUID, ProfileManager.Profile> entry : data.getPlayerProfiles().entrySet()) {
+                        ProfileManager.syncProfileToClient(onlinePlayer, entry.getKey(), entry.getValue());
+                    }
+                }
+            }
             PlayerStatsData stats = new PlayerStatsData(player.getStats());
             serverPlayerStats.put(uuid, stats);
             NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player), new StatsSyncPacket(uuid, stats));
         });
+        syncAllTeamsToAllPlayers();
+        ProfileManager.syncProfileToClient(player);
     }
 
     @SubscribeEvent

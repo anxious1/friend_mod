@@ -10,8 +10,8 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class PlayerNameCache {
-    private static final Map<String, UUID> NAME_UUID = new ConcurrentHashMap<>();
-    private static final Map<UUID, String> UUID_NAME = new ConcurrentHashMap<>();
+    public static final Map<String, UUID> NAME_UUID = new ConcurrentHashMap<>();
+    public static final Map<UUID, String> UUID_NAME = new ConcurrentHashMap<>();
 
     /* вызывать 1 раз при старте сервера и после каждого логина */
     public static void rebuild() {
@@ -30,13 +30,13 @@ public class PlayerNameCache {
 
     @Nullable
     public static String getName(UUID id) {
-        return UUID_NAME.get(id);
+        return UUID_NAME.getOrDefault(id, "Loading...");
     }
-
     /* добавить при входе игрока */
     public static void onLogin(ServerPlayer player) {
         String n = player.getGameProfile().getName();
         NAME_UUID.put(n.toLowerCase(), player.getUUID());
         UUID_NAME.put(player.getUUID(), n);
     }
+
 }

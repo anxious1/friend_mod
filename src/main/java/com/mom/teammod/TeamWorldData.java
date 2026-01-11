@@ -1,26 +1,33 @@
 package com.mom.teammod;
 
+import com.mojang.authlib.GameProfile;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.saveddata.SavedData;
 import net.minecraft.world.level.storage.DimensionDataStorage;
+import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.server.ServerStartedEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.util.*;
+
+import static dev.ftb.mods.ftblibrary.util.KnownServerRegistries.server;
 
 public class TeamWorldData extends SavedData {
 
     private final Map<String, TeamManager.Team> teams = new HashMap<>();
     private final Map<UUID, Set<String>> playerTeams = new HashMap<>();
     private final Map<UUID, ProfileManager.Profile> playerProfiles = new HashMap<>();
-
+    private static TeamWorldData serverCache = null;
     public Map<UUID, ProfileManager.Profile> getPlayerProfiles() {
         return playerProfiles;
     }
     public static final String DATA_NAME = TeamMod.MODID + "_teams";
-
+    private transient ServerLevel level;
     public TeamWorldData() {
     }
 
@@ -111,7 +118,7 @@ public class TeamWorldData extends SavedData {
             profilesTag.put(entry.getKey().toString(), entry.getValue().serializeNBT());
         }
         nbt.put("playerProfiles", profilesTag);
-
+        TeamManager.invalidateCache();
         return nbt;
     }
 
@@ -124,20 +131,34 @@ public class TeamWorldData extends SavedData {
     }
 
     public static TeamWorldData get(ServerLevel level) {
-        System.out.println("[TeamWorldData] get вызван для уровня " + level.dimension().location());
+        if (level == null) return null;
+
+        // Используем кэш, если уже загружено
+        if (serverCache != null && serverCache.level == level) {
+            return serverCache;
+        }
 
         DimensionDataStorage storage = level.getDataStorage();
-
-        // ПРАВИЛЬНО: первый — пустой конструктор, второй — фабрика загрузки из NBT
-        TeamWorldData data = storage.computeIfAbsent(
-                TeamWorldData::loadFromNBT,  // фабрика, которая принимает NBT и возвращает объект
-                TeamWorldData::new,          // пустой объект
+        serverCache = storage.computeIfAbsent(
+                TeamWorldData::loadFromNBT,
+                TeamWorldData::new,
                 DATA_NAME
         );
 
-        System.out.println("[TeamWorldData] data получен: " + (data != null ? "OK (teams=" + data.getTeams().size() + ", profiles=" + data.getPlayerProfiles().size() + ")" : "NULL!"));
+        // Сохраняем ссылку на уровень для проверки
+        serverCache.level = level;
+        return serverCache;
+    }
 
-        return data;
+    public Map<UUID,String> getNameMap() {          // новый геттер
+        Map<UUID,String> map = new HashMap<>();
+        playerProfiles.forEach((u,p)-> map.put(u, p.getGameProfile().getName()));
+        return map;
+    }
+    public void putName(UUID u, String name) {      // новый сеттер
+        ProfileManager.Profile prof = playerProfiles.computeIfAbsent(u, ProfileManager.Profile::new);
+        prof.setGameProfile(new GameProfile(u, name));
+        setDirty(true);
     }
 
     /** Всегда возвращает overworld, т.е. то место, где мы реально храним данные */
@@ -149,5 +170,29 @@ public class TeamWorldData extends SavedData {
         TeamWorldData data = new TeamWorldData();
         data.load(nbt);
         return data;
+    }
+    @SubscribeEvent
+    public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        if (event.getEntity() instanceof ServerPlayer player) {
+            // Сохраняем профиль в мир
+            TeamWorldData data = get(player.serverLevel());
+            ProfileManager.Profile profile = ProfileManager.getProfile(player.serverLevel(), player.getUUID());
+            data.getPlayerProfiles().put(player.getUUID(), profile);
+            data.setDirty(true);
+        }
+    }
+    public ProfileManager.Profile getOrCreateProfile(UUID uuid) {
+        return playerProfiles.computeIfAbsent(uuid, u -> {
+            // Пытаемся достать из кеша сервера
+            ProfileManager.Profile p = new ProfileManager.Profile(uuid);
+            setDirty(true);
+            return p;
+        });
+    }
+    @SubscribeEvent
+    public static void onServerStarted(ServerStartedEvent event) {
+        ServerLevel level = event.getServer().overworld();
+        TeamWorldData data = get(level); // <-- форсируем загрузку
+        System.out.println("[TeamWorldData] Загружено профилей: " + data.getPlayerProfiles().size());
     }
 }

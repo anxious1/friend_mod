@@ -87,9 +87,9 @@ public class TeamProfileOwner extends BaseModScreen {
     private String getNameSafe(UUID id) {
         GameProfile gp = ClientPlayerCache.getGameProfile(id);
         if (gp == null || "Unknown".equals(gp.getName())) {
-            // Запрашиваем у сервера
             NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(id));
-            return "Loading..."; // или вернуть временно "Unknown", но не хранить это
+            // последнее известное имя из мира, а не "Loading..."
+            return PlayerNameCache.getName(id);
         }
         return gp.getName();
     }
@@ -131,6 +131,7 @@ public class TeamProfileOwner extends BaseModScreen {
     @Override
     protected void init() {
         super.init();
+
         scrollOffset = 0;
         int guiX = left();
         int guiY = top();
@@ -545,9 +546,7 @@ public class TeamProfileOwner extends BaseModScreen {
                 String oldName = btn.getMessage().getString();
                 String newName = getNameSafe(uuid);
 
-                if (!newName.equals(oldName) && !"Loading...".equals(newName)) {
-                    btn.setMessage(Component.literal(newName));
-                }
+                if (newName != null && !newName.equals(oldName) && !"Loading...".equals(newName));
             }
         }
     }

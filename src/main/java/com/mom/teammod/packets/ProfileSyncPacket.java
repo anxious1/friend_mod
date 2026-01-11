@@ -1,7 +1,6 @@
 package com.mom.teammod.packets;
 
-import com.mom.teammod.ClientPlayerCache;
-import com.mom.teammod.ProfileManager;
+import com.mom.teammod.*;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraftforge.network.NetworkEvent;
@@ -34,11 +33,20 @@ public class ProfileSyncPacket {
 
     public static void handle(ProfileSyncPacket pkt, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
+            System.out.println("[CLIENT] ProfileSyncPacket для " + pkt.playerUUID);
+            System.out.println("[CLIENT]  NBT name = " + pkt.profileData.getString("name"));
+
             ProfileManager.Profile profile = ProfileManager.getClientProfile(pkt.playerUUID);
-            ClientPlayerCache.updateFromProfile(pkt.playerUUID, profile);
-            if (pkt.profileData != null && !pkt.profileData.isEmpty()) {
-                profile.deserializeNBT(pkt.profileData);
+            profile.deserializeNBT(pkt.profileData);
+
+            String receivedName = profile.getGameProfile().getName();
+            if (receivedName == null || receivedName.isEmpty() || "Unknown".equals(receivedName)) {
+                System.out.println("[CLIENT] имя пустое/Unknown – не кладём в кеш, запрашиваем заново");
+                NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(pkt.playerUUID));
+                return;
             }
+            System.out.println("[CLIENT] кладём в кеш: " + receivedName);
+            ClientPlayerNameCache.put(pkt.playerUUID, receivedName);
         });
         ctx.get().setPacketHandled(true);
     }

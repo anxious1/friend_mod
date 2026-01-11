@@ -2,10 +2,13 @@ package com.mom.teammod;
 
 import com.mojang.authlib.GameProfile;
 import com.mom.teammod.packets.ProfileSyncPacket;
+import com.mom.teammod.packets.RequestProfilePacket;
+import net.minecraft.client.Minecraft;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -178,9 +181,11 @@ public class ProfileManager {
     }
 
     public static Profile getClientProfile(UUID playerUUID) {
+        // На клиенте НЕ пытаемся создать новый — только ждем от сервера
         return clientProfiles.computeIfAbsent(playerUUID, uuid -> {
             Profile p = new Profile(uuid);
             p.setBackground("profile_bg1");
+            p.setGameProfile(new GameProfile(uuid, "Loading...")); // <-- заглушка, но НЕ Unknown
             return p;
         });
     }
@@ -193,43 +198,72 @@ public class ProfileManager {
         NetworkHandler.INSTANCE.send(PacketDistributor.PLAYER.with(() -> player),
                 new ProfileSyncPacket(uuid, profile));
     }
-
+    public static void syncProfileToClient(ServerPlayer recipient, UUID targetUUID, Profile profile) {
+        NetworkHandler.INSTANCE.send(
+                PacketDistributor.PLAYER.with(() -> recipient),
+                new ProfileSyncPacket(targetUUID, profile)
+        );
+    }
+    
     @SubscribeEvent
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
         ProfileManager.Profile prof = ProfileManager.getProfile(player.serverLevel(), player.getUUID());
 
-        // Если расу ещё не записали – запишем
-        if (prof.getRace().isEmpty()) {
-            var cap = player.getCapability(SimpleracesModVariables.PLAYER_VARIABLES_CAPABILITY, null).orElse(null);
-            if (cap != null && cap.selected) {
-                String race = cap.aracha    ? "aracha"
-                        : cap.dragon    ? "dragon"
-                        : cap.dwarf     ? "dwarf"
-                        : cap.elf       ? "elf"
-                        : cap.fairy     ? "fairy"
-                        : cap.halfdead  ? "halfdead"
-                        : cap.merfolk   ? "merfolk"
-                        : cap.orc       ? "orc"
-                        : cap.serpentin ? "serpentin"
-                        : cap.werewolf  ? "werewolf"
-                        : "human";
+        /* 1. Синхронизируем расу при любом несовпадении */
+        var cap = player.getCapability(SimpleracesModVariables.PLAYER_VARIABLES_CAPABILITY, null).orElse(null);
+        if (cap != null && cap.selected) {
+            String race = cap.aracha    ? "aracha"
+                    : cap.dragon    ? "dragon"
+                    : cap.dwarf     ? "dwarf"
+                    : cap.elf       ? "elf"
+                    : cap.fairy     ? "fairy"
+                    : cap.halfdead  ? "halfdead"
+                    : cap.merfolk   ? "merfolk"
+                    : cap.orc       ? "orc"
+                    : cap.serpentin ? "serpentin"
+                    : cap.werewolf  ? "werewolf"
+                    : "human";
+            if (!race.equals(prof.getRace())) {
                 prof.setRace(race);
-                TeamWorldData.get(player.serverLevel()).setDirty(true); // сохраним мир
+                TeamWorldData.get(player.serverLevel()).setDirty(true);
             }
         }
 
-        // дальше ваш существующий код (синхронизация профиля и т.д.)
+        /* 2. Отправляем клиенту актуальный профиль */
         ProfileManager.syncProfileToClient(player);
     }
 
-    // onPlayerLogout: УДАЛИТЬ addPlayTimeTicks + setDirty (дубликат, double время!):
+    public static void saveProfileToDisk(ServerLevel level, UUID uuid) {
+        TeamWorldData data = TeamWorldData.get(level);
+        Profile profile = getProfile(level, uuid);
+        data.getPlayerProfiles().put(uuid, profile);
+        data.setDirty(true);
+
+        // Форсируем сохранение на диск
+        level.getDataStorage().save();
+    }
     @SubscribeEvent
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            clientProfiles.remove(player.getUUID());  // если нужно
-            // sync удалить или оставить
+            // Сохраняем профиль в мир ТОЛЬКО на сервере
+            ServerLevel level = player.serverLevel();
+            TeamWorldData data = TeamWorldData.get(level);
+            ProfileManager.Profile profile = getProfile(level, player.getUUID());
+
+            // Сохраняем текущую экипировку
+            ItemStack[] equipment = new ItemStack[4];
+            for (int i = 0; i < 4; i++) {
+                equipment[i] = player.getItemBySlot(EquipmentSlot.byTypeAndIndex(EquipmentSlot.Type.ARMOR, i)).copy();
+            }
+            profile.setLastEquipment(equipment);
+
+            data.getPlayerProfiles().put(player.getUUID(), profile);
+            data.setDirty(true);
+
+            // Удаляем из клиентского кэша
+            clientProfiles.remove(player.getUUID());
         }
     }
 }

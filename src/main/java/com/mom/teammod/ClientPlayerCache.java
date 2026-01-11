@@ -3,6 +3,7 @@ package com.mom.teammod;
 import com.mojang.authlib.GameProfile;
 import com.mom.teammod.packets.RequestProfilePacket;
 import io.redspace.ironsspellbooks.entity.spells.portal.PortalData;
+import net.minecraft.client.Minecraft;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.item.ItemStack;
 
@@ -54,6 +55,11 @@ public class ClientPlayerCache {
         entry.lastEquipment = equipment;
         entry.hasMet = true;
         entry.lastSeenTime = System.currentTimeMillis();
+
+        // сохраняем в клиентский профиль
+        ProfileManager.Profile clientProfile = ProfileManager.getClientProfile(uuid);
+        clientProfile.setGameProfile(profile);
+        clientProfile.setLastEquipment(equipment);
     }
 
     public static boolean hasMet(UUID uuid) {
@@ -82,11 +88,12 @@ public class ClientPlayerCache {
     public static PortalData getPortalData(UUID uuid) {
         return CacheEntry.portalData.getOrDefault(uuid, new PortalData());
     }
-    private String getNameSafe(UUID id){
+
+    private String getNameSafe(UUID id) {
         GameProfile gp = ClientPlayerCache.getGameProfile(id);
         if (gp == null || "Unknown".equals(gp.getName())) {
             NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(id));
-            return "Loading..."; // или просто вернуть gp.getName() после запроса
+            return PlayerNameCache.getName(id); // последнее известное имя
         }
         return gp.getName();
     }

@@ -560,7 +560,8 @@ public class TeamMemberScreen extends BaseModScreen {
         GameProfile gp = ClientPlayerCache.getGameProfile(id);
         if (gp == null || "Unknown".equals(gp.getName())) {
             NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(id));
-            return "Loading...";
+            // последнее известное имя из мира, а не "Loading..."
+            return PlayerNameCache.getName(id);
         }
         return gp.getName();
     }
@@ -585,10 +586,8 @@ public class TeamMemberScreen extends BaseModScreen {
                 String oldName = btn.getMessage().getString();
                 String newName = getNameSafe(uuid);
 
-                if (!newName.equals(oldName) && !"Loading...".equals(newName)) {
-                    btn.setMessage(Component.literal(newName));
+                if (newName != null && !newName.equals(oldName) && !"Loading...".equals(newName));
                 }
-            }
         }
     }
 
