@@ -38,16 +38,26 @@ public class ClientPlayerCache {
     public static void updateInputTime() {
         lastInputTime = System.currentTimeMillis();
     }
+
     public static void updateFromProfile(UUID uuid, ProfileManager.Profile profile) {
         CacheEntry entry = getOrCreate(uuid);
+
+        // Профиль с сервера = "данные вообще", но это НЕ означает, что игрок был встречен рядом.
+        // Поэтому hasMet здесь НЕ ставим.
         if (profile.getGameProfile() != null) {
             entry.gameProfile = profile.getGameProfile();
         }
+
+        // Снапшот экипировки должен быть "как при встрече".
+        // Если мы уже реально видели игрока (hasMet + lastSeenTime > 0), то серверными данными НЕ затираем.
         if (profile.getLastEquipment() != null) {
-            entry.lastEquipment = profile.getLastEquipment();
+            boolean alreadyMet = entry.hasMet && entry.lastSeenTime > 0;
+            if (!alreadyMet) {
+                entry.lastEquipment = profile.getLastEquipment();
+            }
         }
-        entry.hasMet = true; // считаем, что если профиль есть — значит встречались
     }
+
 
     public static void onPlayerSeen(UUID uuid, GameProfile profile, ItemStack[] equipment) {
         CacheEntry entry = getOrCreate(uuid);
@@ -109,4 +119,100 @@ public class ClientPlayerCache {
     public static boolean isOnline(UUID uuid) {
         return getRawStatus(uuid) != 0;   // 0 = OFFLINE, 1/2 = ONLINE/AFK
     }
+    public static void saveToDisk() {
+        try {
+            java.nio.file.Path dir = net.minecraftforge.fml.loading.FMLPaths.CONFIGDIR.get().resolve("teammod");
+            java.nio.file.Files.createDirectories(dir);
+            java.nio.file.Path file = dir.resolve("client_player_cache.dat");
+
+            net.minecraft.nbt.CompoundTag root = new net.minecraft.nbt.CompoundTag();
+            net.minecraft.nbt.ListTag list = new net.minecraft.nbt.ListTag();
+
+            for (Map.Entry<UUID, CacheEntry> e : cache.entrySet()) {
+                UUID uuid = e.getKey();
+                CacheEntry ce = e.getValue();
+
+                net.minecraft.nbt.CompoundTag tag = new net.minecraft.nbt.CompoundTag();
+                tag.putUUID("uuid", uuid);
+
+                if (ce.gameProfile != null && ce.gameProfile.getName() != null) {
+                    tag.putString("name", ce.gameProfile.getName());
+                }
+                tag.putBoolean("hasMet", ce.hasMet);
+                tag.putLong("lastSeenTime", ce.lastSeenTime);
+
+                tag.putInt("status", ce.status != null ? ce.status.ordinal() : PlayerStatus.OFFLINE.ordinal());
+
+                net.minecraft.nbt.ListTag eq = new net.minecraft.nbt.ListTag();
+                ItemStack[] arr = ce.lastEquipment != null ? ce.lastEquipment : new ItemStack[4];
+                for (int i = 0; i < 4; i++) {
+                    ItemStack st = (i < arr.length && arr[i] != null) ? arr[i] : ItemStack.EMPTY;
+                    net.minecraft.nbt.CompoundTag stTag = new net.minecraft.nbt.CompoundTag();
+                    st.save(stTag);
+                    eq.add(stTag);
+                }
+                tag.put("lastEquipment", eq);
+
+                list.add(tag);
+            }
+
+            root.put("players", list);
+
+            try (java.io.OutputStream os = java.nio.file.Files.newOutputStream(file)) {
+                net.minecraft.nbt.NbtIo.writeCompressed(root, os);
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
+    public static void loadFromDisk() {
+        try {
+            java.nio.file.Path file = net.minecraftforge.fml.loading.FMLPaths.CONFIGDIR.get()
+                    .resolve("teammod")
+                    .resolve("client_player_cache.dat");
+
+            if (!java.nio.file.Files.exists(file)) return;
+
+            net.minecraft.nbt.CompoundTag root;
+            try (java.io.InputStream is = java.nio.file.Files.newInputStream(file)) {
+                root = net.minecraft.nbt.NbtIo.readCompressed(is);
+            }
+            if (root == null) return;
+
+            net.minecraft.nbt.ListTag list = root.getList("players", net.minecraft.nbt.Tag.TAG_COMPOUND);
+            for (int idx = 0; idx < list.size(); idx++) {
+                net.minecraft.nbt.CompoundTag tag = list.getCompound(idx);
+                if (!tag.hasUUID("uuid")) continue;
+
+                UUID uuid = tag.getUUID("uuid");
+                String name = tag.contains("name") ? tag.getString("name") : "Unknown";
+
+                CacheEntry ce = getOrCreate(uuid);
+                ce.gameProfile = new GameProfile(uuid, name);
+                ce.hasMet = tag.getBoolean("hasMet");
+                ce.lastSeenTime = tag.getLong("lastSeenTime");
+
+                int st = tag.getInt("status");
+                PlayerStatus[] vals = PlayerStatus.values();
+                ce.status = (st >= 0 && st < vals.length) ? vals[st] : PlayerStatus.OFFLINE;
+
+                if (tag.contains("lastEquipment", net.minecraft.nbt.Tag.TAG_LIST)) {
+                    net.minecraft.nbt.ListTag eq = tag.getList("lastEquipment", net.minecraft.nbt.Tag.TAG_COMPOUND);
+                    ItemStack[] arr = new ItemStack[4];
+                    for (int i = 0; i < 4; i++) {
+                        if (i < eq.size()) {
+                            arr[i] = ItemStack.of(eq.getCompound(i));
+                        } else {
+                            arr[i] = ItemStack.EMPTY;
+                        }
+                    }
+                    ce.lastEquipment = arr;
+                }
+            }
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+    }
+
 }

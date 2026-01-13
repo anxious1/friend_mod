@@ -149,6 +149,7 @@ public class CreatingTeamScreen extends Screen {
                 setResponder(s -> updateAll());
             }
         };
+        tagBox.setFilter(s -> s != null && s.chars().noneMatch(Character::isWhitespace));
         tagBox.setTooltip(Tooltip.create(Component.literal("Тег должен быть длиной 3 символа!")));
         addRenderableWidget(tagBox);
 
@@ -161,6 +162,7 @@ public class CreatingTeamScreen extends Screen {
                 setResponder(s -> updateAll());
             }
         };
+        nameBox.setFilter(s -> s != null && s.chars().noneMatch(Character::isWhitespace));
         nameBox.setTooltip(Tooltip.create(Component.literal("Название команды должно быть не короче 3 и не длиннее 8 символов!")));
         addRenderableWidget(nameBox);
 

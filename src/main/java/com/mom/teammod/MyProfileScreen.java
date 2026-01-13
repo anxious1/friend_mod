@@ -374,7 +374,7 @@ public class MyProfileScreen extends BaseModScreen {
 
             if (vars.selected) {
                 if (vars.aracha) {
-                    raceLabel = "Aracha";
+                    raceLabel = "Arachna";
                     raceU = 1;
                 } else if (vars.dragon) {
                     raceLabel = "Dragon";

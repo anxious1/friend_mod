@@ -5,10 +5,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.client.gui.screens.Screen;
-import net.minecraft.network.chat.ClickEvent;
-import net.minecraft.network.chat.Component;
-import net.minecraft.network.chat.HoverEvent;
-import net.minecraft.network.chat.Style;
+import net.minecraft.network.chat.*;
 import net.minecraft.world.entity.player.Player;
 import net.minecraftforge.client.event.ClientChatReceivedEvent;
 import net.minecraftforge.client.event.ScreenEvent;
@@ -148,6 +145,7 @@ public class ChatHook {
         Component original = event.getMessage();
         String text = original.getString();
 
+        // Формат ванильного чата: <Nick> message
         if (!text.matches("^<[^>]+> .+$")) return;
 
         int start = text.indexOf('<') + 1;
@@ -157,15 +155,41 @@ public class ChatHook {
         String nick = text.substring(start, end);
         String rest = text.substring(end + 2);
 
-        Player sender = Minecraft.getInstance().level.players().stream()
-                .filter(p -> p.getName().getString().equals(nick))
-                .findFirst()
-                .orElse(null);
+        Minecraft mc = Minecraft.getInstance();
+        if (mc.player == null) return;
 
-        if (sender == null) return;
+        UUID senderUUID = null;
 
-        UUID senderUUID = sender.getUUID();
-        UUID myUUID = Minecraft.getInstance().player.getUUID();
+        // 1) Если игрок сейчас загружен в мире — как раньше
+        if (mc.level != null) {
+            Player sender = mc.level.players().stream()
+                    .filter(p -> p.getName().getString().equals(nick))
+                    .findFirst()
+                    .orElse(null);
+            if (sender != null) {
+                senderUUID = sender.getUUID();
+            }
+        }
+
+        // 2) Если далеко/другое измерение — пробуем найти по clientProfiles (кеш профилей)
+        if (senderUUID == null) {
+            for (var e : ProfileManager.clientProfiles.entrySet()) {
+                UUID uuid = e.getKey();
+                ProfileManager.Profile prof = e.getValue();
+                if (prof != null && prof.getGameProfile() != null) {
+                    String n = prof.getGameProfile().getName();
+                    if (nick.equals(n)) {
+                        senderUUID = uuid;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Если UUID всё ещё не нашли — не трогаем сообщение (как ваниль)
+        if (senderUUID == null) return;
+        UUID finalSenderUUID = senderUUID;
+        UUID myUUID = mc.player.getUUID();
         boolean isMe = myUUID.equals(senderUUID);
 
         // Проверяем, союзник ли (хотя бы по одной команде)
@@ -173,14 +197,17 @@ public class ChatHook {
                 .stream()
                 .anyMatch(teamName -> {
                     TeamManager.Team team = TeamManager.clientTeams.get(teamName);
-                    return team != null && team.getMembers().contains(senderUUID);
+                    return team != null && team.getMembers().contains(finalSenderUUID);
                 });
 
         // Ищем первую команду с тегом у отправителя
         String teamTag = "";
         String teamNameForTag = "";
         for (TeamManager.Team team : TeamManager.clientTeams.values()) {
-            if (team.getMembers().contains(senderUUID) && team.showTag() && TeamScreen.isTagGloballyVisible() && !team.getTag().isEmpty()) {
+            if (team.getMembers().contains(senderUUID)
+                    && team.showTag()
+                    && TeamScreen.isTagGloballyVisible()
+                    && !team.getTag().isEmpty()) {
                 teamTag = team.getTag();
                 teamNameForTag = team.getName();
                 break;
@@ -195,6 +222,8 @@ public class ChatHook {
 
         event.setMessage(message);
     }
+
+
 
     @SubscribeEvent
     public static void onChatMouseClick(ScreenEvent.MouseButtonPressed.Pre event) {

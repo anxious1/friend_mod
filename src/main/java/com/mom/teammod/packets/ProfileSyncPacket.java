@@ -33,21 +33,27 @@ public class ProfileSyncPacket {
 
     public static void handle(ProfileSyncPacket pkt, Supplier<NetworkEvent.Context> ctx) {
         ctx.get().enqueueWork(() -> {
-            System.out.println("[CLIENT] ProfileSyncPacket для " + pkt.playerUUID);
-            System.out.println("[CLIENT]  NBT name = " + pkt.profileData.getString("name"));
-
             ProfileManager.Profile profile = ProfileManager.getClientProfile(pkt.playerUUID);
             profile.deserializeNBT(pkt.profileData);
 
-            String receivedName = profile.getGameProfile().getName();
-            if (receivedName == null || receivedName.isEmpty() || "Unknown".equals(receivedName)) {
-                System.out.println("[CLIENT] имя пустое/Unknown – не кладём в кеш, запрашиваем заново");
-                NetworkHandler.INSTANCE.sendToServer(new RequestProfilePacket(pkt.playerUUID));
+            // Обновляем клиентский кэш профиля (важно: чтобы не было "раса не выбрана" и т.п.)
+            ClientPlayerCache.updateFromProfile(pkt.playerUUID, profile);
+
+            String receivedName = null;
+            if (profile.getGameProfile() != null) {
+                receivedName = profile.getGameProfile().getName();
+            }
+
+            // Если имя норм — кладём в кеш имён
+            if (receivedName != null && !receivedName.isBlank() && !"Unknown".equalsIgnoreCase(receivedName) && !"Loading...".equalsIgnoreCase(receivedName)) {
+                ClientPlayerNameCache.put(pkt.playerUUID, receivedName);
                 return;
             }
-            System.out.println("[CLIENT] кладём в кеш: " + receivedName);
-            ClientPlayerNameCache.put(pkt.playerUUID, receivedName);
+
+            // Иначе: НЕ спамим сервер отсюда, а ставим UUID в очередь дозагрузки (лимит сделаем в client tick)
+            ClientPlayerCache.loadQueue.offer(pkt.playerUUID);
         });
         ctx.get().setPacketHandled(true);
     }
+
 }

@@ -150,14 +150,51 @@ public class TeamWorldData extends SavedData {
         return serverCache;
     }
 
-    public Map<UUID,String> getNameMap() {          // новый геттер
-        Map<UUID,String> map = new HashMap<>();
-        playerProfiles.forEach((u,p)-> map.put(u, p.getGameProfile().getName()));
+    public Map<UUID, String> getNameMap() {
+        Map<UUID, String> map = new HashMap<>();
+        playerProfiles.forEach((u, p) -> {
+            if (p == null) return;
+
+            GameProfile gp = null;
+            try {
+                gp = p.getGameProfile();
+            } catch (Exception ignored) {}
+
+            String name = (gp != null) ? gp.getName() : null;
+            if (name == null) return;
+
+            String n = name.trim();
+            if (n.isEmpty()) return;
+
+            // отсекаем заглушки
+            if ("Unknown".equalsIgnoreCase(n) || "Loading...".equalsIgnoreCase(n)) return;
+
+            map.put(u, n);
+        });
         return map;
     }
-    public void putName(UUID u, String name) {      // новый сеттер
+
+    public void putName(UUID u, String name) {
+        if (u == null || name == null) return;
+        String n = name.trim();
+        if (n.isEmpty()) return;
+
         ProfileManager.Profile prof = playerProfiles.computeIfAbsent(u, ProfileManager.Profile::new);
-        prof.setGameProfile(new GameProfile(u, name));
+
+        // если в профиле уже было нормальное имя — не перезаписываем на Unknown/Loading
+        GameProfile old = null;
+        try { old = prof.getGameProfile(); } catch (Exception ignored) {}
+        if (old != null) {
+            String oldName = old.getName();
+            if (oldName != null && !oldName.isBlank()
+                    && !"Unknown".equalsIgnoreCase(oldName)
+                    && !"Loading...".equalsIgnoreCase(oldName)
+                    && ("Unknown".equalsIgnoreCase(n) || "Loading...".equalsIgnoreCase(n))) {
+                return;
+            }
+        }
+
+        prof.setGameProfile(new GameProfile(u, n));
         setDirty(true);
     }
 
@@ -174,13 +211,23 @@ public class TeamWorldData extends SavedData {
     @SubscribeEvent
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
         if (event.getEntity() instanceof ServerPlayer player) {
-            // Сохраняем профиль в мир
-            TeamWorldData data = get(player.serverLevel());
-            ProfileManager.Profile profile = ProfileManager.getProfile(player.serverLevel(), player.getUUID());
+            ServerLevel storageLevel = TeamWorldData.storageLevel(player.getServer());
+
+            TeamWorldData data = get(storageLevel);
+            ProfileManager.Profile profile = ProfileManager.getProfile(storageLevel, player.getUUID());
+
             data.getPlayerProfiles().put(player.getUUID(), profile);
+
+            // заодно сохраняем имя
+            if (player.getGameProfile() != null && player.getGameProfile().getName() != null && !player.getGameProfile().getName().isBlank()) {
+                data.putName(player.getUUID(), player.getGameProfile().getName());
+            }
+
             data.setDirty(true);
+            storageLevel.getDataStorage().save();
         }
     }
+
     public ProfileManager.Profile getOrCreateProfile(UUID uuid) {
         return playerProfiles.computeIfAbsent(uuid, u -> {
             // Пытаемся достать из кеша сервера

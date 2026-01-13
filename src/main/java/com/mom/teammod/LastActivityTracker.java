@@ -23,4 +23,8 @@ public class LastActivityTracker {
     public static void onLogout(UUID uuid) {
         MAP.remove(uuid);
     }
+    public static void onInput(UUID uuid) {
+        update(uuid);
+    }
+
 }

@@ -4,8 +4,11 @@ import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 import net.minecraft.server.MinecraftServer;
 
+import java.io.BufferedReader;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.nio.charset.StandardCharsets;
 import java.util.*;
 
 public class CensorService {
@@ -23,11 +26,37 @@ public class CensorService {
     }
 
     private void loadBannedWords() {
-        try (Reader r = new InputStreamReader(
-                Objects.requireNonNull(getClass().getResourceAsStream("/assets/teammod/banned_words.txt")))) {
-            new Scanner(r).forEachRemaining(w -> bannedWords.add(w.toLowerCase(Locale.ROOT)));
-        } catch (Exception e) { e.printStackTrace(); }
+        bannedWords.clear();
+
+        // 3 файла, которые ты добавил
+        loadWordFileToSet("/assets/teammod/banned_words_ru.txt", bannedWords);
+        loadWordFileToSet("/assets/teammod/banned_words_en.txt", bannedWords);
+        loadWordFileToSet("/assets/teammod/banned_words_translit.txt", bannedWords);
     }
+
+    private static void loadWordFileToSet(String resourcePath, Set<String> out) {
+        try (InputStream is = CensorService.class.getResourceAsStream(resourcePath)) {
+            if (is == null) {
+                System.out.println("[TeamMod:Censor] Missing resource: " + resourcePath);
+                return;
+            }
+
+            try (BufferedReader br = new BufferedReader(new InputStreamReader(is, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    line = line.trim();
+                    if (line.isEmpty()) continue;
+                    if (line.startsWith("#")) continue;
+
+                    out.add(line.toLowerCase(Locale.ROOT));
+                }
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+
 
     private void loadJsonLists() {
         Gson gson = new Gson();
@@ -47,9 +76,50 @@ public class CensorService {
 
     public boolean isDirty(String s) {
         if (s == null) return false;
-        String lower = s.toLowerCase(Locale.ROOT);
-        return bannedWords.stream().anyMatch(lower::contains);
+
+        String norm = normalizeForCensor(s);
+        if (norm.isEmpty()) return false;
+
+        // токены: только буквы/цифры (и кириллица, и латиница)
+        String[] tokens = norm.split("\\s+");
+
+        for (String bw : bannedWords) {
+            if (bw == null) continue;
+            String w = bw.trim().toLowerCase(Locale.ROOT);
+            if (w.isEmpty()) continue;
+
+            // Супер-важно: короткие бан-слова не ищем как подстроку
+            if (w.length() <= 3) {
+                // 1) если вся строка == бан-слово (важно для тегов типа "abc")
+                if (norm.equals(w)) return true;
+                // 2) если какой-то токен == бан-слово
+                for (String t : tokens) {
+                    if (t.equals(w)) return true;
+                }
+                continue;
+            }
+
+            // Длинные: ищем в токенах, а не в сырой строке (меньше фп)
+            for (String t : tokens) {
+                if (t.contains(w)) return true;
+            }
+        }
+
+        return false;
     }
+
+    private static String normalizeForCensor(String s) {
+        String lower = s.toLowerCase(Locale.ROOT)
+                .replace('ё', 'е');
+
+        // заменяем всё, что не буква/цифра, на пробел
+        lower = lower.replaceAll("[^\\p{L}\\p{N}]+", " ");
+
+        // схлопываем пробелы
+        lower = lower.trim().replaceAll("\\s{2,}", " ");
+        return lower;
+    }
+
 
     public String getSafeTag(String original) {
         if (!isDirty(original)) return original;

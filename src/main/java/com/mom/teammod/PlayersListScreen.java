@@ -396,10 +396,14 @@ public class PlayersListScreen extends BaseModScreen {
             int headX = getX() + 7;
             int headY = getY() + 2;
 
-            Player player = minecraft.level != null ? minecraft.level.getPlayerByUUID(entry.id) : null;
-            ResourceLocation skin = player != null
-                    ? minecraft.getSkinManager().getInsecureSkinLocation(player.getGameProfile())
-                    : minecraft.getSkinManager().getInsecureSkinLocation(minecraft.player.getGameProfile());
+            // ВАЖНО: не берём minecraft.player.getGameProfile(), если target игрок не найден.
+            // Берём GameProfile из кеша (он может быть даже когда игрок далеко/в другом измерении).
+            GameProfile gp = PlayersListScreen.this.getProfileSafe(entry.id);
+            if (gp == null) {
+                gp = new GameProfile(entry.id, entry.name); // fallback, чтобы была хотя бы дефолтная текстура
+            }
+
+            ResourceLocation skin = minecraft.getSkinManager().getInsecureSkinLocation(gp);
 
             g.blit(skin, headX, headY, headSize, headSize, 8, 8, 8, 8, 64, 64);
             RenderSystem.enableBlend();
@@ -443,6 +447,8 @@ public class PlayersListScreen extends BaseModScreen {
                 g.blit(ATLAS, kickX, kickY, KICK_U, KICK_V, KICK_W, KICK_H, 256, 256);
             }
         }
+
+
 
         @Override
         public void onClick(double mx, double my) {

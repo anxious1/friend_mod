@@ -526,7 +526,7 @@ public class OtherPlayerProfileScreen extends BaseModScreen {
     }
 
     private String getRaceFromCapability(SimpleracesModVariables.PlayerVariables cap) {
-        if (cap.aracha) return "Aracha";
+        if (cap.aracha) return "Arachna";
         if (cap.dragon) return "Dragon";
         if (cap.dwarf) return "Dwarf";
         if (cap.elf) return "Elf";

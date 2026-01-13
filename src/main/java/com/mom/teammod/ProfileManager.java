@@ -1,6 +1,7 @@
 package com.mom.teammod;
 
 import com.mojang.authlib.GameProfile;
+import com.mom.teammod.packets.PlayerStatusPacket;
 import com.mom.teammod.packets.ProfileSyncPacket;
 import com.mom.teammod.packets.RequestProfilePacket;
 import net.minecraft.client.Minecraft;
@@ -204,17 +205,39 @@ public class ProfileManager {
                 new ProfileSyncPacket(targetUUID, profile)
         );
     }
-    
+
     @SubscribeEvent
     public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
-        ProfileManager.Profile prof = ProfileManager.getProfile(player.serverLevel(), player.getUUID());
+        ServerLevel storageLevel = TeamWorldData.storageLevel(player.getServer());
+        TeamWorldData data = TeamWorldData.get(storageLevel);
 
-        /* 1. Синхронизируем расу при любом несовпадении */
+        // 1) сохраняем имя при логине (оффлайн-доступность)
+        if (player.getGameProfile() != null
+                && player.getGameProfile().getName() != null
+                && !player.getGameProfile().getName().isBlank()) {
+            data.putName(player.getUUID(), player.getGameProfile().getName());
+            data.setDirty(true);
+            storageLevel.getDataStorage().save();
+        }
+
+        // 2) сбрасываем lastActivity чтобы после релога НЕ висел AFK
+        LastActivityTracker.onInput(player.getUUID());
+
+        // 3) гарантируем ONLINE всем (перебиваем старый AFK у других)
+        NetworkHandler.INSTANCE.send(
+                PacketDistributor.ALL.noArg(),
+                new PlayerStatusPacket(player.getUUID(), (byte) 1)
+        );
+
+        // 4) профиль
+        ProfileManager.Profile prof = ProfileManager.getProfile(storageLevel, player.getUUID());
+
+        // 5) пробуем синкнуть расу сразу (если капа уже поднята)
         var cap = player.getCapability(SimpleracesModVariables.PLAYER_VARIABLES_CAPABILITY, null).orElse(null);
         if (cap != null && cap.selected) {
-            String race = cap.aracha    ? "aracha"
+            String race = cap.aracha    ? "arachna"
                     : cap.dragon    ? "dragon"
                     : cap.dwarf     ? "dwarf"
                     : cap.elf       ? "elf"
@@ -225,15 +248,93 @@ public class ProfileManager {
                     : cap.serpentin ? "serpentin"
                     : cap.werewolf  ? "werewolf"
                     : "human";
+
             if (!race.equals(prof.getRace())) {
                 prof.setRace(race);
-                TeamWorldData.get(player.serverLevel()).setDirty(true);
+                data.setDirty(true);
+                storageLevel.getDataStorage().save();
             }
+
+            // отправляем всем обновлённый профиль (чтобы раса у других обновилась сразу)
+            NetworkHandler.INSTANCE.send(
+                    PacketDistributor.ALL.noArg(),
+                    new ProfileSyncPacket(player.getUUID(), prof)
+            );
+        } else {
+            // капа ещё не готова -> ставим "отложенный" синк (5 попыток)
+            player.getPersistentData().putInt("teammod_race_sync_cd", 20);      // через 1 сек
+            player.getPersistentData().putInt("teammod_race_sync_tries", 0);    // попытки
         }
 
-        /* 2. Отправляем клиенту актуальный профиль */
+        // 6) себе — профиль сразу (как и было)
         ProfileManager.syncProfileToClient(player);
     }
+
+
+    @SubscribeEvent
+    public static void onServerTick(net.minecraftforge.event.TickEvent.ServerTickEvent e) {
+        if (e.phase != net.minecraftforge.event.TickEvent.Phase.END) return;
+
+        // каждый тик дешево, но можно и раз в 2-5 тиков — оставлю тик, т.к. игроков мало
+        e.getServer().getPlayerList().getPlayers().forEach(player -> {
+            var pd = player.getPersistentData();
+            if (!pd.contains("teammod_race_sync_cd")) return;
+
+            int cd = pd.getInt("teammod_race_sync_cd") - 1;
+            if (cd > 0) {
+                pd.putInt("teammod_race_sync_cd", cd);
+                return;
+            }
+
+            int tries = pd.getInt("teammod_race_sync_tries");
+            if (tries >= 5) {
+                // сдаёмся, чтобы не крутить вечно
+                pd.remove("teammod_race_sync_cd");
+                pd.remove("teammod_race_sync_tries");
+                return;
+            }
+
+            ServerLevel storageLevel = TeamWorldData.storageLevel(player.getServer());
+            TeamWorldData data = TeamWorldData.get(storageLevel);
+            ProfileManager.Profile prof = ProfileManager.getProfile(storageLevel, player.getUUID());
+
+            var cap = player.getCapability(SimpleracesModVariables.PLAYER_VARIABLES_CAPABILITY, null).orElse(null);
+            if (cap != null && cap.selected) {
+                String race = cap.aracha    ? "arachna"
+                        : cap.dragon    ? "dragon"
+                        : cap.dwarf     ? "dwarf"
+                        : cap.elf       ? "elf"
+                        : cap.fairy     ? "fairy"
+                        : cap.halfdead  ? "halfdead"
+                        : cap.merfolk   ? "merfolk"
+                        : cap.orc       ? "orc"
+                        : cap.serpentin ? "serpentin"
+                        : cap.werewolf  ? "werewolf"
+                        : "human";
+
+                if (!race.equals(prof.getRace())) {
+                    prof.setRace(race);
+                    data.setDirty(true);
+                    storageLevel.getDataStorage().save();
+                }
+
+                // УБИРАЕМ отложенный синк
+                pd.remove("teammod_race_sync_cd");
+                pd.remove("teammod_race_sync_tries");
+
+                // ШЛЁМ ВСЕМ — чтобы без релога увидели
+                NetworkHandler.INSTANCE.send(
+                        PacketDistributor.ALL.noArg(),
+                        new ProfileSyncPacket(player.getUUID(), prof)
+                );
+            } else {
+                // ещё не поднялась капа -> повторим через секунду
+                pd.putInt("teammod_race_sync_tries", tries + 1);
+                pd.putInt("teammod_race_sync_cd", 20);
+            }
+        });
+    }
+
 
     public static void saveProfileToDisk(ServerLevel level, UUID uuid) {
         TeamWorldData data = TeamWorldData.get(level);
@@ -244,26 +345,35 @@ public class ProfileManager {
         // Форсируем сохранение на диск
         level.getDataStorage().save();
     }
+
     @SubscribeEvent
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
-        if (event.getEntity() instanceof ServerPlayer player) {
-            // Сохраняем профиль в мир ТОЛЬКО на сервере
-            ServerLevel level = player.serverLevel();
-            TeamWorldData data = TeamWorldData.get(level);
-            ProfileManager.Profile profile = getProfile(level, player.getUUID());
+        if (!(event.getEntity() instanceof ServerPlayer player)) return;
 
-            // Сохраняем текущую экипировку
-            ItemStack[] equipment = new ItemStack[4];
-            for (int i = 0; i < 4; i++) {
-                equipment[i] = player.getItemBySlot(EquipmentSlot.byTypeAndIndex(EquipmentSlot.Type.ARMOR, i)).copy();
-            }
-            profile.setLastEquipment(equipment);
+        ServerLevel storageLevel = TeamWorldData.storageLevel(player.getServer());
+        TeamWorldData data = TeamWorldData.get(storageLevel);
+        ProfileManager.Profile profile = getProfile(storageLevel, player.getUUID());
 
-            data.getPlayerProfiles().put(player.getUUID(), profile);
-            data.setDirty(true);
-
-            // Удаляем из клиентского кэша
-            clientProfiles.remove(player.getUUID());
+        // Сохраняем текущую экипировку
+        ItemStack[] equipment = new ItemStack[4];
+        for (int i = 0; i < 4; i++) {
+            equipment[i] = player.getItemBySlot(EquipmentSlot.byTypeAndIndex(EquipmentSlot.Type.ARMOR, i)).copy();
         }
+        profile.setLastEquipment(equipment);
+
+        // Сохраняем профиль в мир
+        data.getPlayerProfiles().put(player.getUUID(), profile);
+        data.setDirty(true);
+        storageLevel.getDataStorage().save();
+
+        // Гарантированно выставляем OFFLINE всем клиентам
+        NetworkHandler.INSTANCE.send(
+                PacketDistributor.ALL.noArg(),
+                new PlayerStatusPacket(player.getUUID(), (byte) 0)
+        );
+
+        // Удаляем из клиентского кэша (серверный мир хранит)
+        clientProfiles.remove(player.getUUID());
     }
+
 }

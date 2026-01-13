@@ -856,4 +856,149 @@ public class TeamManager {
         Team t = getData().getTeams().get(teamName);
         return t == null || t.getMembers().contains(player) || t.getInvited().contains(player);
     }
+    // TeamManager.java
+
+    public static boolean adminDeleteTeam(String teamName, net.minecraft.commands.CommandSourceStack src) {
+        TeamWorldData data = getData();
+        if (data == null) return false;
+
+        final String tName = teamName == null ? "" : teamName.trim();
+        if (tName.isEmpty()) return false;
+
+        Team team = data.getTeams().get(tName);
+        if (team == null) return false;
+
+        Set<UUID> members = new HashSet<>(team.getMembers());
+
+        // убрать команду у игроков
+        Map<UUID, Set<String>> playerTeams = data.getPlayerTeams();
+        for (UUID u : members) {
+            Set<String> set = playerTeams.get(u);
+            if (set != null) {
+                set.remove(tName);
+                if (set.isEmpty()) playerTeams.remove(u);
+            }
+        }
+
+        // удалить команду
+        data.getTeams().remove(tName);
+
+        data.setDirty(true);
+        syncTeamToAll(tName); // team=null => клиент удалит
+
+        // уведомим онлайн игроков (опционально)
+        net.minecraft.server.MinecraftServer server = net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer();
+        if (server != null) {
+            for (UUID u : members) {
+                net.minecraft.server.level.ServerPlayer p = server.getPlayerList().getPlayer(u);
+                if (p != null) {
+                    p.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                            "§cВаша команда §f" + tName + " §cбыла удалена администратором."
+                    ));
+                }
+            }
+        }
+
+        if (src != null) {
+            src.sendSuccess(() -> net.minecraft.network.chat.Component.literal("§aКоманда §f" + tName + " §aудалена."), true);
+        }
+        return true;
+    }
+
+    public static boolean adminRenameTeam(String oldName, String newName, net.minecraft.commands.CommandSourceStack src) {
+        TeamWorldData data = getData();
+        if (data == null) return false;
+
+        final String oName = oldName == null ? "" : oldName.trim();
+        final String nName = newName == null ? "" : newName.trim();
+
+        if (oName.isEmpty() || nName.isEmpty()) return false;
+        if (oName.equalsIgnoreCase(nName)) return false;
+
+        Map<String, Team> teams = data.getTeams();
+        Team oldTeam = teams.get(oName);
+        if (oldTeam == null) return false;
+
+        if (teams.containsKey(nName)) return false;
+
+        // создаём новую команду и переносим поля
+        Team newTeam = new Team(nName, null);
+
+        newTeam.owner = oldTeam.owner;
+
+        newTeam.members.clear();
+        newTeam.members.addAll(oldTeam.members);
+
+        newTeam.invited.clear();
+        newTeam.invited.addAll(oldTeam.invited);
+
+        newTeam.inviteOnly = oldTeam.inviteOnly;
+        newTeam.friendlyFire = oldTeam.friendlyFire;
+        newTeam.tag = oldTeam.tag;
+        newTeam.nameColor = oldTeam.nameColor;
+        newTeam.tagColor = oldTeam.tagColor;
+        newTeam.showTag = oldTeam.showTag;
+        newTeam.showCompass = oldTeam.showCompass;
+
+        // заменить в teams
+        teams.remove(oName);
+        teams.put(nName, newTeam);
+
+        // заменить в playerTeams
+        Map<UUID, Set<String>> playerTeams = data.getPlayerTeams();
+        for (UUID u : new HashSet<>(newTeam.getMembers())) {
+            Set<String> set = playerTeams.computeIfAbsent(u, k -> new HashSet<>());
+            set.remove(oName);
+            set.add(nName);
+        }
+
+        data.setDirty(true);
+
+        // клиенты: сначала удалить старую, потом отправить новую
+        syncTeamToAll(oName);
+        syncTeamToAll(nName);
+
+        // опционально уведомим онлайн
+        net.minecraft.server.MinecraftServer server = net.minecraftforge.server.ServerLifecycleHooks.getCurrentServer();
+        if (server != null) {
+            for (UUID u : newTeam.getMembers()) {
+                net.minecraft.server.level.ServerPlayer p = server.getPlayerList().getPlayer(u);
+                if (p != null) {
+                    p.sendSystemMessage(net.minecraft.network.chat.Component.literal(
+                            "§eНазвание команды изменено: §f" + oName + " §e→ §f" + nName
+                    ));
+                }
+            }
+        }
+
+        if (src != null) {
+            src.sendSuccess(() -> net.minecraft.network.chat.Component.literal("§aКоманда переименована: §f" + oName + " §a→ §f" + nName), true);
+        }
+        return true;
+    }
+
+    public static boolean adminSetTeamTag(String teamName, String newTag, net.minecraft.commands.CommandSourceStack src) {
+        TeamWorldData data = getData();
+        if (data == null) return false;
+
+        final String tName = teamName == null ? "" : teamName.trim();
+        final String tag = newTag == null ? "" : newTag.trim();
+
+        if (tName.isEmpty() || tag.isEmpty()) return false;
+
+        Team team = data.getTeams().get(tName);
+        if (team == null) return false;
+
+        team.setTag(tag);
+
+        data.setDirty(true);
+        syncTeamToAll(tName);
+
+        if (src != null) {
+            src.sendSuccess(() -> net.minecraft.network.chat.Component.literal("§aТег команды §f" + tName + " §aизменён на §f" + tag), true);
+        }
+        return true;
+    }
+
+
 }
